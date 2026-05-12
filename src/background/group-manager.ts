@@ -30,8 +30,13 @@ export interface ApplyGroupInput {
 
 /**
  * Create a new tab group (or extend an existing one) and apply
- * name + color. Returns the resulting groupId, or null if there were
- * no tabs to group.
+ * name + color. Returns the resulting groupId, or null if grouping
+ * wasn't possible (no tabs / chrome.tabs.group rejected — e.g. the
+ * window is a PWA / popup / panel that doesn't support tab groups).
+ *
+ * Throw-safe: chrome.tabs.group can throw "Grouping is not supported
+ * by tabs in this window." for non-normal window types. We catch that
+ * here so one bad window can't cascade through the caller.
  */
 export async function applyGroup(input: ApplyGroupInput): Promise<number | null> {
   if (input.tabIds.length === 0) return null;
@@ -47,12 +52,30 @@ export async function applyGroup(input: ApplyGroupInput): Promise<number | null>
       : {}),
   };
 
-  const groupId = await chrome.tabs.group(groupOptions);
+  let groupId: number;
+  try {
+    groupId = await chrome.tabs.group(groupOptions);
+  } catch (err) {
+    console.warn(
+      `[tabswirl] chrome.tabs.group failed for window ${input.windowId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
 
-  await chrome.tabGroups.update(groupId, {
-    title: input.name,
-    color: input.color,
-  });
+  try {
+    await chrome.tabGroups.update(groupId, {
+      title: input.name,
+      color: input.color,
+    });
+  } catch (err) {
+    // The group was created but couldn't be named/colored. Surface the
+    // error and still return the id — the tabs are at least grouped.
+    console.warn(
+      `[tabswirl] chrome.tabGroups.update failed for group ${groupId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   return groupId;
 }
@@ -61,13 +84,22 @@ export async function applyGroup(input: ApplyGroupInput): Promise<number | null>
  * Move tabs into an already-existing group, leaving the group's
  * title/color alone. Used by the fast path in the classifier queue
  * when a domain cache hit tells us exactly which group to extend.
+ *
+ * Throw-safe with the same rationale as applyGroup.
  */
 export async function addTabsToGroup(
   groupId: number,
   tabIds: number[],
 ): Promise<void> {
   if (tabIds.length === 0) return;
-  await chrome.tabs.group({ tabIds, groupId });
+  try {
+    await chrome.tabs.group({ tabIds, groupId });
+  } catch (err) {
+    console.warn(
+      `[tabswirl] addTabsToGroup failed for group ${groupId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 /**

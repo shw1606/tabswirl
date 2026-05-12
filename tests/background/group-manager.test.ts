@@ -130,6 +130,41 @@ describe("group-manager", () => {
     expect(byId.get(codeId!)?.sampleTabs).toHaveLength(1);
   });
 
+  it("applyGroup returns null when chrome.tabs.group throws (e.g. PWA window)", async () => {
+    mock.seedTabs([
+      { id: 50, windowId: 30, groupId: -1, title: "PWA tab", url: "https://pwa.example/" },
+    ]);
+    // Override chrome.tabs.group to throw, mimicking a non-normal window.
+    const chromeAny = (globalThis as unknown as {
+      chrome: { tabs: { group: unknown } };
+    }).chrome;
+    chromeAny.tabs.group = vi.fn(async () => {
+      throw new Error("Grouping is not supported by tabs in this window.");
+    });
+
+    const groupId = await applyGroup({
+      windowId: 30,
+      tabIds: [50],
+      name: "X",
+      color: "blue",
+    });
+
+    expect(groupId).toBeNull();
+    // Tab is left untouched.
+    expect(mock.tabs.get(50)?.groupId).toBe(-1);
+  });
+
+  it("addTabsToGroup logs and swallows when chrome.tabs.group throws", async () => {
+    const chromeAny = (globalThis as unknown as {
+      chrome: { tabs: { group: unknown } };
+    }).chrome;
+    chromeAny.tabs.group = vi.fn(async () => {
+      throw new Error("Grouping is not supported by tabs in this window.");
+    });
+
+    await expect(addTabsToGroup(1000, [1])).resolves.toBeUndefined();
+  });
+
   it("snapshotWindowGroups respects sampleTabCount cap", async () => {
     mock.seedTabs([
       { id: 100, windowId: 10, groupId: -1, title: "t100", url: "u" },

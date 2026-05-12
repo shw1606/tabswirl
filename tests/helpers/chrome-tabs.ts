@@ -29,16 +29,30 @@ export interface FakeGroup {
   color: ChromeGroupColor;
 }
 
+export interface FakeWindow {
+  id: number;
+  type: chrome.windows.windowTypeEnum;
+}
+
 type OnUpdatedListener = (
   tabId: number,
   changeInfo: chrome.tabs.TabChangeInfo,
   tab: chrome.tabs.Tab,
 ) => void;
 
+type OnWindowRemovedListener = (windowId: number) => void;
+
 export interface ChromeTabsMock {
   tabs: Map<number, FakeTab>;
   groups: Map<number, FakeGroup>;
+  windows: Map<number, FakeWindow>;
   seedTabs: (tabs: FakeTab[]) => void;
+  /** Override or add a window with a specific type (defaults to "normal"). */
+  seedWindow: (id: number, type?: chrome.windows.windowTypeEnum) => void;
+  /** Make chrome.windows.getLastFocused return this window id. */
+  setFocusedWindow: (id: number) => void;
+  /** Trigger chrome.windows.onRemoved for cache invalidation tests. */
+  fireWindowRemoved: (id: number) => void;
   /** Trigger chrome.tabs.onUpdated for a given tab id with the in-memory tab data. */
   fireOnUpdated: (
     tabId: number,
@@ -50,9 +64,16 @@ export interface ChromeTabsMock {
 export function installChromeTabsMock(): ChromeTabsMock {
   const tabs = new Map<number, FakeTab>();
   const groups = new Map<number, FakeGroup>();
+  const windows = new Map<number, FakeWindow>();
   let nextGroupId = 1000;
   let nextAutoTabId = 9000;
+  let focusedWindowId: number | null = null;
   const onUpdatedListeners = new Set<OnUpdatedListener>();
+  const onWindowRemovedListeners = new Set<OnWindowRemovedListener>();
+
+  function ensureWindow(id: number, type: chrome.windows.windowTypeEnum = "normal"): void {
+    if (!windows.has(id)) windows.set(id, { id, type });
+  }
 
   function fakeTabToChromeTab(t: FakeTab): chrome.tabs.Tab {
     return {
@@ -198,20 +219,83 @@ export function installChromeTabsMock(): ChromeTabsMock {
     ),
   };
 
+  const windowsApi = {
+    get: vi.fn(async (windowId: number) => {
+      const w = windows.get(windowId);
+      if (!w) {
+        throw new Error(`fake chrome.windows.get: unknown window ${windowId}`);
+      }
+      return { id: w.id, type: w.type };
+    }),
+
+    getAll: vi.fn(
+      async (queryOptions?: { populate?: boolean }) => {
+        return [...windows.values()].map((w) => {
+          const base: { id: number; type: chrome.windows.windowTypeEnum; tabs?: chrome.tabs.Tab[] } = {
+            id: w.id,
+            type: w.type,
+          };
+          if (queryOptions?.populate) {
+            base.tabs = [...tabs.values()]
+              .filter((t) => t.windowId === w.id)
+              .map(fakeTabToChromeTab);
+          }
+          return base;
+        });
+      },
+    ),
+
+    getLastFocused: vi.fn(async () => {
+      const id =
+        focusedWindowId !== null
+          ? focusedWindowId
+          : ([...windows.values()][0]?.id ?? 1);
+      const w = windows.get(id);
+      return w
+        ? { id: w.id, type: w.type }
+        : { id, type: "normal" as chrome.windows.windowTypeEnum };
+    }),
+
+    onRemoved: {
+      addListener: vi.fn((listener: OnWindowRemovedListener) => {
+        onWindowRemovedListeners.add(listener);
+      }),
+      removeListener: vi.fn((listener: OnWindowRemovedListener) => {
+        onWindowRemovedListeners.delete(listener);
+      }),
+    },
+  };
+
   const existingChrome =
     (globalThis as { chrome?: Record<string, unknown> }).chrome ?? {};
   vi.stubGlobal("chrome", {
     ...existingChrome,
     tabs: tabsApi,
     tabGroups: tabGroupsApi,
+    windows: windowsApi,
   });
 
   return {
     tabs,
     groups,
+    windows,
     onUpdatedListeners,
     seedTabs: (toAdd) => {
-      for (const t of toAdd) tabs.set(t.id, { ...t });
+      for (const t of toAdd) {
+        tabs.set(t.id, { ...t });
+        ensureWindow(t.windowId);
+      }
+    },
+    seedWindow: (id, type = "normal") => {
+      windows.set(id, { id, type });
+    },
+    setFocusedWindow: (id) => {
+      focusedWindowId = id;
+      ensureWindow(id);
+    },
+    fireWindowRemoved: (id) => {
+      windows.delete(id);
+      for (const l of onWindowRemovedListeners) l(id);
     },
     fireOnUpdated: (tabId, changeInfo) => {
       const tab = tabs.get(tabId);
