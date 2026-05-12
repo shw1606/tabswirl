@@ -335,6 +335,30 @@
 
 ---
 
+## 2bd0eb9 — 2026-05-12 23:20 KST
+**feat(llm,options): Gemini provider (free tier, default) + onboarding UI (Option A)**
+
+- **상황:** Option B(provider 추상화) 직후 Gemini 구현체 추가. 1,000 RPD 무료 티어 + 카드 없음 + 30초 발급 = 진입장벽 최저.
+- **핵심 변경:**
+  - `src/llm/validate.ts` 신설 — anthropic.ts 내부에 있던 검증 로직(CLAUDE.md §5 4개 invariant + duplicate tab_id)을 provider 공유 헬퍼로 분리.
+  - `src/llm/gemini.ts` 신설 — `generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` 호출, `x-goog-api-key` 헤더, function calling 강제(`toolConfig.functionCallingConfig.mode: "ANY"`). 기본 모델 `gemini-2.5-flash-lite`. BYOK 키는 `byok:gemini`(anthropic 키와 독립). `resolveModel`이 비-Gemini 모델 id를 만나면 default로 fallback.
+  - `src/llm/anthropic.ts` — 자체 검증 함수 제거, shared validator 사용. 코드 약 80줄 감소.
+  - `src/llm/provider.ts` — `LlmProviderName` 유니언에 `"gemini"` 추가, `getProvider`에 case 등록, `DEFAULT_PROVIDER`를 `"gemini"`로 flip.
+  - `src/core/types.ts` + `settings.ts` — `Settings.llmProvider` 유니언 확장, `llmModel`을 optional로. `DEFAULT_SETTINGS.llmProvider = "gemini"`. `setSettings`가 provider 전환 시 `llmModel`을 drop해서 새 provider가 자기 default 모델 사용하도록.
+  - `manifest.config.ts` — `host_permissions`에 `https://generativelanguage.googleapis.com/*` 추가. 이거 없으면 SW의 fetch가 CORS로 403.
+  - `src/options/App.tsx` — provider 라디오 버튼 2개 (Gemini "Free/Recommended" 배지, Anthropic "Paid" 배지). 활성 provider에 따라 placeholder · signup 링크 · onboarding 4단계 안내가 swap. 두 provider 키 모두 독립 저장 → 둘 다 미리 입력해두고 자유롭게 토글 가능.
+  - `tests/llm/gemini.test.ts` 신설 (10 케이스): missing-key, key 격리(`byok:gemini`만 읽음), request shape 검증, `options.model` override 및 fallback, network·http 에러, no-tool-call, validation, incremental.
+  - `tests/llm/provider.test.ts` 갱신: 기존 "unsupported gemini" 케이스 제거 → 명시적 Gemini 라우팅 + default-routes-to-Gemini + 미등록 provider("openrouter") unsupported 케이스로 대체.
+  - 기존 `initial-classifier`/`classifier-queue` 테스트가 default 변경의 영향을 받아 `provider: "anthropic"` 명시.
+- **결정:**
+  - **Default = Gemini.** 신규 사용자 onboarding의 마찰을 0에 가깝게.
+  - **두 키 분리 저장.** provider 토글 시 키 재입력 불필요. 사용자가 동시에 둘 다 설정해두고 비교·전환 가능.
+  - **모델은 provider-internal default.** UI에 모델 노출 안 함 (advanced 영역). 각 provider가 들어온 `options.model`을 자기 prefix와 비교해 무시 가능.
+  - **`anthropic-dangerous-direct-browser-access` 헤더 분기.** Gemini는 별도 헤더 불필요(CORS 정책이 다름). 두 provider 모듈이 각자 자기 wire detail 책임.
+- **검증:** 121/121 통과 (기존 110 + 신규 11), typecheck·build 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
