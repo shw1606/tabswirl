@@ -124,6 +124,22 @@
 
 ---
 
+## ec1d6c4 — 2026-05-12 19:31 KST
+**feat(background): domain-cache (PRD §14 #6)**
+
+- **PRD §14 단계:** 6번
+- **핵심 변경:**
+  - `src/background/domain-cache.ts` — `chrome.storage.session` 래퍼. windowId × domain → `{groupId, categoryName, color, lastUsed}`. API: `getDomainEntry` / `setDomainEntry` / `seedDomainEntries` (벌크) / `listDomainEntries` (incremental 프롬프트용 스냅샷) / `clearWindow` / `forgetGroup`.
+  - `tests/background/domain-cache.test.ts` — 8 케이스 (없음·round-trip·윈도우 격리·벌크 시드·빈 시드·전체 클리어·그룹별 invalidation·overwrite).
+  - `tests/helpers/chrome-storage.ts` — `local`만 지원하던 목을 `session`까지 확장. 기존 테스트(20개) 영향 없음.
+- **결정:**
+  - 저장 형태는 `Record<domain, entry>` per window — structured-cloneable 보장.
+  - `forgetGroup`: 사용자가 그룹 ungroup·삭제했을 때 해당 group을 가리키던 캐시 엔트리를 무효화. 그렇지 않으면 다음 같은 도메인 탭이 죽은 groupId를 만나 `chrome.tabGroups.move`에서 silent fail.
+  - `chrome.storage.session`은 Chrome 102+. PRD §6.5 권한 `storage`만으로 충분.
+- **검증:** 43/43 통과.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
