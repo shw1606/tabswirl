@@ -140,6 +140,25 @@
 
 ---
 
+## bd159b3 — 2026-05-12 19:32 KST
+**feat(background): group-manager (PRD §14 #7)**
+
+- **PRD §14 단계:** 7번
+- **핵심 변경:**
+  - `src/background/group-manager.ts` — `chrome.tabs.group` + `chrome.tabGroups.update`의 원자적 래퍼.
+    - `applyGroup(input)` — 새 그룹 생성 또는 기존 그룹 확장, name+color 적용. 빈 tabIds면 no-op.
+    - `addTabsToGroup(groupId, tabIds)` — 캐시 hit 빠른 경로 전용.
+    - `ungroupTabs(tabIds)` — 분리.
+    - `snapshotWindowGroups(windowId, sampleTabCount=3)` — incremental 프롬프트 컨텍스트.
+  - `tests/helpers/chrome-tabs.ts` — in-memory `chrome.tabs.{group,ungroup,query}` + `chrome.tabGroups.{update,query}` 목. 다른 chrome.* 목과 겹치지 않게 기존 `globalThis.chrome`을 합쳐서 stub.
+  - `tests/background/group-manager.test.ts` — 8 케이스.
+- **결정:**
+  - 단일 진실 모듈: 외부에서 `chrome.tabs.group` / `chrome.tabGroups.update`를 직접 호출하지 않게 함. 9개 컬러 enum의 런타임 경계 한 곳.
+  - 헬퍼는 cross-window grouping 시 throw — Common trap §4 (`chrome.tabs.group`은 같은 윈도우만 허용)를 테스트에서 재현.
+- **검증:** 51/51 통과, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
