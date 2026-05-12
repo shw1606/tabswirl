@@ -259,6 +259,20 @@
 
 ---
 
+## 5faf2b9 — 2026-05-12 21:15 KST
+**feat: manual re-classify trigger + visible failure logging**
+
+- **PRD §14 단계:** 해당 없음 (디버그·UX 보강).
+- **상황:** 수동 e2e에서 자동 분류가 동작하지 않음. 추정 원인: 익스텐션 설치 시점엔 BYOK 키가 없어서 `classifyAllOpenTabs`가 `missing-key`로 즉시 silent fallback. 그 이후 키를 설정해도 재트리거 경로 없음. 게다가 모든 실패 경로가 console에 아무것도 안 남겨서 사용자가 원인을 못 봄.
+- **핵심 변경:**
+  - `src/core/messaging.ts` — `ClassifyAllRequest` / `ClassifyAllResponse` + `sendClassifyAll()`.
+  - `src/background/service-worker.ts` — onMessage 리스너를 `message.type` 디스패치로 리팩터. `classify-all-tabs` 분기 추가 (현재 settings로 `classifyAllOpenTabs` 실행, 결과 카운트 반환).
+  - `src/options/App.tsx` — "Re-classify all open tabs now" 버튼. 클릭 시 SW에 메시지 발송, 결과 표시. 설명 문구로 "auto-classify-on-install만 1회 발화" 한계 명시.
+  - `src/llm/anthropic.ts` — 모든 silent-fallback 경로에 `console.warn` 추가. missing-key / network / HTTP non-2xx (status + body slice) / no tool_use / validation reason. `chrome://extensions` → "service worker" devtools 콘솔에서 한눈에 확인 가능.
+- **검증:** 92/92, typecheck·build 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
