@@ -308,6 +308,33 @@
 
 ---
 
+## ab4ec63 — 2026-05-12 23:03 KST
+**refactor(llm): provider abstraction (PRD §6.6)**
+
+- **상황:** 다음 단계(Gemini 무료 티어 도입)를 위한 사전 작업. 호출자들이 `./anthropic`를 직접 import하던 걸 끊고 facade 한 군데에 dispatch 모음. PRD §6.6의 `src/llm/provider.ts` 마침내 등장.
+- **PRD §14 단계:** 5번 보강 (provider 추상화).
+- **핵심 변경:**
+  - `src/llm/provider.ts` 신설. `LlmProvider` 인터페이스, `LlmProviderName` 타입(현재 `"anthropic"` only), `ClassifyError` (+`unsupported-provider` kind), `ClassifyResult`, `ClassifyOptions`(+optional `provider`). `getProvider(name)` 팩토리 + `classifyInitial`/`classifyIncremental` facade.
+  - `src/llm/anthropic.ts` — 공유 타입은 provider.ts에서 type-only import (런타임 cycle 없음, 모듈 의존은 provider→anthropic 한 방향). 끝에 `anthropicProvider: LlmProvider` const export.
+  - 모든 callsite가 facade 경유: `initial-classifier.ts`, `classifier-queue.ts`. `settings.llmProvider`를 옵션 체인(`RunOptions` / `FlushOptions` / `EnqueueInput`)으로 propagate. `tab-listener` / `service-worker`(onInstalled · onMessage)에서 명시적으로 전달.
+  - `tests/llm/provider.test.ts` — 5 케이스 (`getProvider`, default dispatch, explicit dispatch, `unsupported-provider` error, incremental routing). 기존 anthropic 테스트(11개)는 그대로 — wire protocol을 격리 검증.
+- **결정:**
+  - `LlmProviderName`은 현재 `"anthropic"` 단일 — Gemini는 다음 커밋에서 확장.
+  - `core/types.ts`의 `Settings.llmProvider`는 literal `"anthropic"`로 유지(provider.ts로의 import cycle 회피). Gemini 추가 시 함께 확장.
+  - 타입 import 양방향성: anthropic.ts → provider.ts는 `import type`만. provider.ts → anthropic.ts는 value import. 결과적으로 런타임 cycle 없음.
+- **검증:** 110/110 통과 (기존 105 + 신규 5), typecheck·build 깨끗.
+
+---
+
+## 33e47a3 — 2026-05-12 23:04 KST
+**chore: untrack stray AI-generated PNG + add gitignore patterns**
+
+- **상황:** `ab4ec63`의 `git add -A`가 프로젝트 루트의 stray 3.4 MB PNG(`Gemini_Generated_Image_*.png`)를 같이 올림. AI 이미지 생성 결과물이 다운로드로 떨어진 것으로 추정.
+- **핵심 변경:** `git rm --cached`로 untrack (디스크엔 유지). `.gitignore`에 `Gemini_Generated_*` / `ChatGPT_Image_*` 패턴 추가.
+- **남은 일:** 바이너리는 ab4ec63의 tree object에 남아있음. 리모트로 push 전이고 단일 작가 repo라 크기 부담 없음. 필요하면 나중에 `git filter-repo`로 일괄 제거 가능.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
