@@ -377,6 +377,26 @@
 
 ---
 
+## 8ad6de0 — 2026-05-12 23:42 KST
+**chore(icons): add extension icon set + register in manifest**
+
+- **상황:** 사용자가 외부에서 생성한 Pouch 라인아트 PNG(2816×1536, 흰 iOS-style 둥근 사각형 안에 파란 라인의 주머니 + 문서들)을 익스텐션 대표 이미지로 등록.
+- **PRD §14 단계:** 해당 없음 (UX polish).
+- **파이프라인 (macOS sips):**
+  - 원본 분석: 2816×1536, 중앙에 1280×1280 정도의 흰 둥근 사각형 아이콘 영역.
+  - `assets/icon-source.png` — 1280×1280 정중앙 크롭. 48/128 생성용 canonical 소스.
+  - `public/icons/icon-128.png` — `sips -z 128` from 1280 소스.
+  - `public/icons/icon-48.png` — `sips -z 48` from 1280 소스.
+  - `public/icons/icon-32.png` — 별도 800×800 타이트 크롭에서 `sips -z 32`. (1280 소스에서 직접 줄이면 padding 때문에 흐려짐.)
+  - `public/icons/icon-16.png` — 600×600 더 타이트한 크롭에서 `sips -z 16`. 라인이 frame을 채우게 해서 toolbar 표시에서 식별 가능.
+- **매니페스트:** `manifest.config.ts`에 `icons.{16,32,48,128}` + `action.default_icon.{16,32}` 추가. 경로는 `icons/...`(naked) — vite가 `public/` prefix를 dist root로 flatten하므로 `public/icons/...`로 쓰면 dist에서 이중 경로 생김.
+- **결정:**
+  - 작은 사이즈는 별도 타이트 크롭. 한 소스에서 모든 사이즈를 sips로 줄이면 16px가 거의 안 보임 (저대비 + 안티앨리어싱).
+  - `assets/icon-source.png`(1.6MB) 커밋 — repo 크기 부담 있지만, 디자인 변경 시 재생성용. 원본 3.4MB PNG는 디스크에서 삭제.
+- **검증:** 126/126, typecheck·build 깨끗. dist/manifest.json이 4 사이즈 모두 올바른 경로로 반영. dist/icons/에 4 PNG 출력 확인.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
