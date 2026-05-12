@@ -411,6 +411,18 @@
 
 ---
 
+## 37784a2 — 2026-05-13 00:21 KST
+**chore(icons): re-revised source — corrected alignment, resize-only pipeline**
+
+- **상황:** 직전 c06e16b의 수정본은 pouch가 rounded square 안에서 약간 한쪽으로 치우쳐 있었음. 사용자가 정렬 보정해서 다시 가져옴 (1280×1280 유지).
+- **PRD §14 단계:** 해당 없음.
+- **핵심 변경:**
+  - `assets/icon-source.png` 교체. pouch가 rounded square 정중앙으로 정렬됨.
+  - `public/icons/icon-{16,32,48,128}.png` — 이번엔 **per-size tight crop 없이** 동일 1280 소스에서 `sips -z`만. 소스가 이미 충분히 확대돼있어서 32까지는 직접 다운샘플로 OK. 16은 sips 한계로 같은 수준(silhouette만 식별).
+- **검증:** build 깨끗, 코드 영향 없음 (126/126 그대로).
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
