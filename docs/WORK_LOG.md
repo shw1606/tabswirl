@@ -1,0 +1,87 @@
+# TabSwirl — Work Log
+
+커밋 단위로 어떤 작업이 실제로 이뤄졌는지 기록한다. PRD §14 부트스트랩 순서를 참조점으로 사용한다.
+
+기록 규칙:
+- 새 커밋이 생기면 맨 위에 추가한다 (역시간순).
+- 항목당: 커밋 해시, 날짜, 한 줄 요약, PRD §14 단계 매핑, 핵심 변경, 결정·트레이드오프(있을 때만), 테스트·검증 결과.
+
+---
+
+## c7dc4e2 — 2026-05-12 09:53 KST
+**feat(core): pouch-store CRUD with Vitest (M1)**
+
+- **PRD §14 단계:** 4번 완료 → CLAUDE.md 마일스톤 M1 종료
+- **핵심 변경:**
+  - `src/core/pouch-store.ts` — `createPouch` / `getPouch` / `listPouches` / `removePouch`. 저장소 레이아웃은 PRD §6.4 그대로 `pouch:<id>` + `pouches:index` (newest first).
+  - `tests/core/pouch-store.test.ts` — 9개 케이스 (round-trip, 순서, totalTabs 합산, optional 필드, 없는 id, 멱등 삭제, 깨진 index 자가 복구, 빈 상태).
+  - `tests/helpers/chrome-storage.ts` — Vitest용 in-memory `chrome.storage.local` 목.
+- **결정:**
+  - `removePouch`는 consume-on-restore의 원시 동작. **멱등**으로 설계해 같은 id에 두 번 호출돼도 안전.
+  - `listPouches`는 index에 있는데 실제 pouch가 사라진 항목을 만나면 index를 즉시 보정한다 (자가 복구). 데이터 손실 시나리오에서 UI가 멈추지 않게.
+  - id 생성은 `crypto.randomUUID()` — MV3 서비스 워커·Node 19+ 모두 지원.
+- **검증:** `pnpm test` 9/9 통과, `pnpm typecheck` 깨끗.
+
+---
+
+## 3ba09eb — 2026-05-12 09:52 KST
+**feat(core): add types module (PRD §7 data model)**
+
+- **PRD §14 단계:** 3번
+- **핵심 변경:** `src/core/types.ts` — `ChromeGroupColor`, `SavedTab`, `SavedGroup`, `UngroupedBucket`, `Pouch`, `Settings`, `DomainCacheEntry`.
+- **결정:**
+  - 모든 타입을 structured-cloneable한 평면 객체로만 정의 (no `Map` / `Set` / `Date`). CLAUDE.md "Common traps" §5 준수 — chrome.storage가 직렬화 못 하는 자료형은 처음부터 못 들어가게.
+  - `ChromeGroupColor`는 9개 enum로 고정. LLM 응답 검증·`chrome.tabGroups.update` 양쪽 단일 진실.
+- **검증:** 이 커밋으로 `src/llm/prompts.ts`의 `import type { ChromeGroupColor } from "../core/types"` 미해결 import가 사라짐 → typecheck 통과.
+
+---
+
+## b9a91e7 — 2026-05-12 09:51 KST
+**chore: bootstrap project scaffold**
+
+- **PRD §14 단계:** 1번 + 2번
+- **핵심 변경:**
+  - `package.json` — Vite 6 / crxjs 2 / React 19 / TypeScript 5.9 strict / Tailwind 3 / Vitest 2. 스크립트: `dev` `build` `test` `test:watch` `typecheck`.
+  - `tsconfig.json` — strict + `noUncheckedIndexedAccess` + `noImplicitOverride` 등 엄격 옵션 활성, JSX react-jsx.
+  - `vite.config.ts` — `@crxjs/vite-plugin`의 `crx({ manifest })` + React 플러그인.
+  - `vitest.config.ts` — node 환경, `tests/**/*.test.ts` 패턴, `clearMocks: true`.
+  - `tailwind.config.ts`, `postcss.config.js` — UI 마일스톤(M5+) 사전 준비.
+  - `manifest.config.ts` — PRD §6.5 그대로 (`tabs` / `tabGroups` / `storage` / `unlimitedStorage`, host_permissions: anthropic, `Cmd+Shift+P` 단축키).
+  - `pnpm-workspace.yaml` — pnpm v11의 새 빌드 스크립트 게이트 통과용 `allowBuilds: { esbuild: true }`.
+- **결정·발견:**
+  - 처음에 pnpm v11이 `[ERR_PNPM_IGNORED_BUILDS]`로 막혔다. 해결책 탐색 중 `pnpm.onlyBuiltDependencies` (package.json) 와 `.npmrc verify-deps-before-run=false` 둘 다 무효 → `pnpm-workspace.yaml`의 `allowBuilds.esbuild: true` 가 동작했다.
+  - 매니페스트의 entry point들(`src/popup/index.html`, `src/options/index.html`, `src/background/service-worker.ts`)은 M5+에서 생긴다. **결과: 현재 `pnpm build`는 실패하고, `pnpm test`·`pnpm typecheck`만 통과한다.** 이는 의도된 상태 — M1 목표는 단위 테스트 통과까지.
+- **검증:** `pnpm install` 클린, `pnpm typecheck`는 prompts.ts의 미해결 import 한 건만 남김 (다음 커밋에서 해소).
+
+---
+
+## 46accee — 2026-05-12 09:48 KST
+**chore: initial commit (PRD, CLAUDE.md, llm prompts)**
+
+- **PRD §14 단계:** 0번 (베이스라인)
+- **핵심 변경:**
+  - `CLAUDE.md` — 운영 가이드 (사용자가 사전 작성).
+  - `docs/TabSwirl-PRD.md` — 제품 PRD v0.3 (사용자가 사전 작성).
+  - `src/llm/prompts.ts` — LLM 시스템 프롬프트 + Anthropic tool use 스키마 (사용자가 사전 작성).
+  - `.gitignore` — node_modules, dist, .env 등.
+- **결정:** git 저장소가 없던 상태였기에 `git init -b main`으로 시작. 사용자가 직접 쓴 파일들을 분리된 베이스라인 커밋으로 박제 → 이후 모든 변경은 AI 작업.
+- **검증:** 해당 없음 (베이스라인).
+
+---
+
+## 알려진 미해결 / 다음 작업으로 넘긴 사항
+
+- **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
+- **PRD §6.6의 폴더 이름 오기:** `tabpouch/` → `tabswirl/`. 순수 표기 문제.
+- **`pnpm build` 미가용:** 매니페스트가 가리키는 entry point들이 아직 없어 빌드 불가. PRD §14 단계 5~11 진행하며 자연스럽게 해소된다.
+
+---
+
+## 다음 단계 — PRD §14 5번
+
+`src/llm/anthropic.ts` 작성. 요구:
+- raw `fetch`로 `https://api.anthropic.com/v1/messages` 호출 (SDK 미사용).
+- 필수 헤더: `anthropic-version: 2023-06-01`, `anthropic-dangerous-direct-browser-access: true`, `x-api-key`.
+- BYOK 키는 `chrome.storage.local`의 `byok:anthropic`에서 읽음.
+- 응답의 tool_use 블록을 PRD/CLAUDE.md §5의 4개 검증 (`tab_id` 존재, color enum, 그룹명-color 일관성, assignments 길이)으로 게이트.
+- 실패 시 조용히 ungrouped fallback — crash 금지.
