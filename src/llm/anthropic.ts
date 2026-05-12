@@ -21,7 +21,6 @@
 // fall back to "leave tabs ungrouped". This module never throws on
 // remote / model failures.
 
-import type { ChromeGroupColor } from "../core/types";
 import {
   CLASSIFY_TABS_TOOL,
   LLM_DEFAULTS,
@@ -29,7 +28,6 @@ import {
   getIncrementalUserPrompt,
   getInitialSystemPrompt,
   getInitialUserPrompt,
-  type ClassificationAssignment,
   type ClassifyTabsToolInput,
   type ExistingGroup,
   type TabInput,
@@ -41,22 +39,11 @@ import type {
   ClassifyResult,
   LlmProvider,
 } from "./provider";
+import { validateAssignments } from "./validate";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const BYOK_STORAGE_KEY = "byok:anthropic";
-
-const ALLOWED_COLORS: ReadonlySet<string> = new Set<ChromeGroupColor>([
-  "grey",
-  "blue",
-  "red",
-  "yellow",
-  "green",
-  "pink",
-  "purple",
-  "cyan",
-  "orange",
-]);
 
 // ============================================================
 // BYOK key
@@ -94,86 +81,7 @@ function extractToolInput(
   return null;
 }
 
-// ============================================================
-// Validation
-// ============================================================
-
-type ValidationOutcome =
-  | { ok: true; assignments: ClassificationAssignment[] }
-  | { ok: false; reason: string };
-
-function validateAssignments(
-  raw: unknown,
-  expectedTabIds: ReadonlySet<number>,
-): ValidationOutcome {
-  if (
-    !raw ||
-    typeof raw !== "object" ||
-    !Array.isArray((raw as { assignments?: unknown }).assignments)
-  ) {
-    return { ok: false, reason: "missing assignments array" };
-  }
-
-  const assignments = (raw as { assignments: unknown[] }).assignments;
-
-  if (assignments.length !== expectedTabIds.size) {
-    return {
-      ok: false,
-      reason: `expected ${expectedTabIds.size} assignments, got ${assignments.length}`,
-    };
-  }
-
-  const seenTabIds = new Set<number>();
-  const groupColors = new Map<string, ChromeGroupColor>();
-  const result: ClassificationAssignment[] = [];
-
-  for (const a of assignments) {
-    if (!a || typeof a !== "object") {
-      return { ok: false, reason: "assignment is not an object" };
-    }
-    const r = a as Record<string, unknown>;
-
-    if (
-      typeof r["tab_id"] !== "number" ||
-      typeof r["group_name"] !== "string" ||
-      typeof r["color"] !== "string" ||
-      typeof r["is_new_group"] !== "boolean"
-    ) {
-      return { ok: false, reason: "assignment field types" };
-    }
-
-    const tab_id = r["tab_id"];
-    const group_name = r["group_name"];
-    const color = r["color"];
-    const is_new_group = r["is_new_group"];
-
-    if (!expectedTabIds.has(tab_id)) {
-      return { ok: false, reason: `unknown tab_id ${tab_id}` };
-    }
-    if (seenTabIds.has(tab_id)) {
-      return { ok: false, reason: `duplicate tab_id ${tab_id}` };
-    }
-    seenTabIds.add(tab_id);
-
-    if (!ALLOWED_COLORS.has(color)) {
-      return { ok: false, reason: `invalid color "${color}"` };
-    }
-    const typedColor = color as ChromeGroupColor;
-
-    const existing = groupColors.get(group_name);
-    if (existing && existing !== typedColor) {
-      return {
-        ok: false,
-        reason: `group "${group_name}" assigned both ${existing} and ${typedColor}`,
-      };
-    }
-    groupColors.set(group_name, typedColor);
-
-    result.push({ tab_id, group_name, color: typedColor, is_new_group });
-  }
-
-  return { ok: true, assignments: result };
-}
+// Validation is shared across providers — see ./validate.ts.
 
 // ============================================================
 // Network

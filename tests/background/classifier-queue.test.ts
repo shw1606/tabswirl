@@ -77,6 +77,7 @@ describe("classifier-queue — fast path", () => {
       title: "PG2",
       url: "https://postgresql.org/b",
       language: "en",
+      provider: "anthropic",
     });
 
     expect(result.path).toBe("cache-hit");
@@ -116,6 +117,7 @@ describe("classifier-queue — slow path", () => {
       title: "New Site",
       url: "https://new.example.com/",
       language: "en",
+      provider: "anthropic",
     });
     expect(r.path).toBe("queued");
     expect(env.net.requests).toHaveLength(0);
@@ -151,14 +153,17 @@ describe("classifier-queue — slow path", () => {
 
     await enqueueTab({
       tabId: 1, windowId: 10, title: "A", url: "https://a.example.com/", language: "en",
+      provider: "anthropic",
     });
     await vi.advanceTimersByTimeAsync(100);
     await enqueueTab({
       tabId: 2, windowId: 10, title: "B", url: "https://b.example.com/", language: "en",
+      provider: "anthropic",
     });
     await vi.advanceTimersByTimeAsync(100);
     await enqueueTab({
       tabId: 3, windowId: 10, title: "C", url: "https://c.example.com/", language: "en",
+      provider: "anthropic",
     });
 
     // None of those should have fired yet — each enqueue resets the timer.
@@ -187,9 +192,11 @@ describe("classifier-queue — slow path", () => {
 
     await enqueueTab({
       tabId: 1, windowId: 10, title: "A", url: "https://a.example.com/", language: "en",
+      provider: "anthropic",
     });
     await enqueueTab({
       tabId: 1, windowId: 10, title: "A", url: "https://a.example.com/", language: "en",
+      provider: "anthropic",
     });
 
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 10);
@@ -211,6 +218,7 @@ describe("classifier-queue — slow path", () => {
 
     await enqueueTab({
       tabId: 1, windowId: 10, title: "A", url: "https://a.example.com/", language: "en",
+      provider: "anthropic",
     });
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 10);
 
@@ -237,6 +245,7 @@ describe("classifier-queue — slow path", () => {
 
     await enqueueTab({
       tabId: 1, windowId: 10, title: "New", url: "https://new.example.com/", language: "en",
+      provider: "anthropic",
     });
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 10);
 
@@ -262,6 +271,7 @@ describe("classifier-queue — slow path", () => {
 
     await enqueueTab({
       tabId: 1, windowId: 10, title: "New", url: "https://new.example.com/", language: "en",
+      provider: "anthropic",
     });
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 10);
 
@@ -304,7 +314,7 @@ describe("classifier-queue — rehydrate (SW wake)", () => {
       body: toolResponse([{ tab_id: 1, group_name: "Misc", color: "grey" }]),
     });
 
-    await rehydrateQueue({ language: "en" });
+    await rehydrateQueue({ language: "en", provider: "anthropic" });
     // The flush runs asynchronously; flush its microtasks.
     await vi.advanceTimersByTimeAsync(10);
 
@@ -327,7 +337,7 @@ describe("classifier-queue — rehydrate (SW wake)", () => {
       body: toolResponse([{ tab_id: 1, group_name: "Misc", color: "grey" }]),
     });
 
-    await rehydrateQueue({ language: "en" });
+    await rehydrateQueue({ language: "en", provider: "anthropic" });
     expect(env.net.requests).toHaveLength(0);
 
     await vi.advanceTimersByTimeAsync(250);

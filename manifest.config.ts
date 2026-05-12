@@ -11,7 +11,10 @@ export default defineManifest({
   description:
     "AI-powered automatic tab classification with consume-on-restore Pouches.",
   permissions: ["tabs", "tabGroups", "storage", "unlimitedStorage"],
-  host_permissions: ["https://api.anthropic.com/*"],
+  host_permissions: [
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*",
+  ],
   action: {
     default_popup: "src/popup/index.html",
     default_title: "TabSwirl",

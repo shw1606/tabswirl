@@ -14,6 +14,7 @@
 // PRD §6.6 lists this file as the canonical place for the interface.
 
 import { anthropicProvider } from "./anthropic";
+import { geminiProvider } from "./gemini";
 import type {
   ClassificationAssignment,
   ExistingGroup,
@@ -25,7 +26,7 @@ import type {
  * Tag for one of the configured LLM backends. Expand this union when a
  * new provider is registered in getProvider().
  */
-export type LlmProviderName = "anthropic";
+export type LlmProviderName = "anthropic" | "gemini";
 
 export type ClassifyError =
   | { kind: "missing-key" }
@@ -62,7 +63,9 @@ export interface LlmProvider {
   ): Promise<ClassifyResult>;
 }
 
-const DEFAULT_PROVIDER: LlmProviderName = "anthropic";
+// Gemini's free tier (1,000 RPD, no credit card) is the lowest-friction
+// default. Anthropic stays available for users who prefer it.
+const DEFAULT_PROVIDER: LlmProviderName = "gemini";
 
 /**
  * Look up the implementation for a given provider tag. Returns null
@@ -73,6 +76,8 @@ export function getProvider(name: LlmProviderName): LlmProvider | null {
   switch (name) {
     case "anthropic":
       return anthropicProvider;
+    case "gemini":
+      return geminiProvider;
     default:
       return null;
   }

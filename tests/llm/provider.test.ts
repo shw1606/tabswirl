@@ -55,26 +55,7 @@ describe("provider facade", () => {
     expect(provider?.name).toBe("anthropic");
   });
 
-  it("classifyInitial routes to Anthropic when no provider is set (default)", async () => {
-    await storage.local.set({ "byok:anthropic": "sk-test" });
-    net.queueResponse({
-      status: 200,
-      body: toolResponse([{ tab_id: 1, group_name: "G", color: "blue" }]),
-    });
-
-    const result = await classifyInitial(
-      [{ id: 1, title: "A", domain: "a.example" }],
-      { language: "en" },
-    );
-
-    expect(result.ok).toBe(true);
-    // Confirm we actually hit api.anthropic.com via the Anthropic provider.
-    expect(net.requests[0]?.url).toBe(
-      "https://api.anthropic.com/v1/messages",
-    );
-  });
-
-  it("classifyInitial routes to Anthropic when provider is set explicitly", async () => {
+  it('classifyInitial routes to Anthropic when provider: "anthropic"', async () => {
     await storage.local.set({ "byok:anthropic": "sk-test" });
     net.queueResponse({
       status: 200,
@@ -87,26 +68,107 @@ describe("provider facade", () => {
     );
 
     expect(result.ok).toBe(true);
+    expect(net.requests[0]?.url).toBe("https://api.anthropic.com/v1/messages");
   });
 
-  it("returns unsupported-provider for an unregistered name (defensive runtime branch)", async () => {
-    // Bypass the type system to simulate a stale settings value that
-    // points at a provider whose impl was removed / never added.
+  it('classifyInitial routes to Gemini when provider: "gemini"', async () => {
+    await storage.local.set({ "byok:gemini": "AIza-test" });
+    net.queueResponse({
+      status: 200,
+      body: {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: "classify_tabs",
+                    args: {
+                      assignments: [
+                        {
+                          tab_id: 1,
+                          group_name: "G",
+                          color: "blue",
+                          is_new_group: true,
+                        },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
     const result = await classifyInitial(
       [{ id: 1, title: "A", domain: "a.example" }],
-      { language: "en", provider: "gemini" as unknown as LlmProviderName },
+      { language: "en", provider: "gemini" },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(net.requests[0]?.url).toContain("generativelanguage.googleapis.com");
+  });
+
+  it('classifyInitial defaults to Gemini when provider omitted', async () => {
+    await storage.local.set({ "byok:gemini": "AIza-test" });
+    net.queueResponse({
+      status: 200,
+      body: {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: "classify_tabs",
+                    args: {
+                      assignments: [
+                        {
+                          tab_id: 1,
+                          group_name: "G",
+                          color: "blue",
+                          is_new_group: true,
+                        },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const result = await classifyInitial(
+      [{ id: 1, title: "A", domain: "a.example" }],
+      { language: "en" }, // no provider
+    );
+
+    expect(result.ok).toBe(true);
+    // Default flipped to Gemini in this commit; the request must hit Google.
+    expect(net.requests[0]?.url).toContain("generativelanguage.googleapis.com");
+  });
+
+  it("returns unsupported-provider for an unregistered name", async () => {
+    const result = await classifyInitial(
+      [{ id: 1, title: "A", domain: "a.example" }],
+      { language: "en", provider: "openrouter" as unknown as LlmProviderName },
     );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe("unsupported-provider");
     if (result.error.kind !== "unsupported-provider") return;
-    expect(result.error.provider).toBe("gemini");
-    // No network call attempted.
+    expect(result.error.provider).toBe("openrouter");
     expect(net.requests).toHaveLength(0);
   });
 
-  it("classifyIncremental routes to the same provider", async () => {
+  it("classifyIncremental routes to the configured provider", async () => {
     await storage.local.set({ "byok:anthropic": "sk-test" });
     net.queueResponse({
       status: 200,
@@ -116,10 +178,11 @@ describe("provider facade", () => {
     const result = await classifyIncremental(
       [],
       [{ id: 1, title: "A", domain: "a.example" }],
-      { language: "en" },
+      { language: "en", provider: "anthropic" },
     );
 
     expect(result.ok).toBe(true);
     expect(net.requests).toHaveLength(1);
+    expect(net.requests[0]?.url).toBe("https://api.anthropic.com/v1/messages");
   });
 });

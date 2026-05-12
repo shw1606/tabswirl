@@ -54,8 +54,15 @@ export interface Pouch {
 }
 
 export interface Settings {
-  llmProvider: "anthropic";
-  llmModel: string;
+  /** Mirrored from src/llm/provider.ts LlmProviderName. */
+  llmProvider: "anthropic" | "gemini";
+  /**
+   * Optional model override. When omitted, each provider picks its own
+   * default (claude-haiku-4-5 for Anthropic, gemini-2.5-flash-lite for
+   * Gemini). A provider that doesn't recognize the model string falls
+   * back to its default.
+   */
+  llmModel?: string;
   autoClassifyEnabled: boolean;
   /** When false, only domain (not full URL) is sent to the LLM. */
   sendUrls: boolean;

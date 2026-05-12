@@ -70,7 +70,7 @@ describe("classifyAllOpenTabs", () => {
       ]),
     });
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
 
     expect(result.totalClassified).toBe(3);
     expect(result.totalErrors).toBe(0);
@@ -125,7 +125,7 @@ describe("classifyAllOpenTabs", () => {
       ]),
     });
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
     expect(result.totalClassified).toBe(1);
 
     // Only the single classifiable tab should have been in the prompt.
@@ -153,7 +153,7 @@ describe("classifyAllOpenTabs", () => {
       body: toolResponse([{ tab_id: 2, group_name: "Cat", color: "red" }]),
     });
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
 
     expect(result.windows).toHaveLength(2);
     expect(net.requests).toHaveLength(2);
@@ -201,7 +201,7 @@ describe("classifyAllOpenTabs", () => {
       ),
     });
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
     expect(net.requests).toHaveLength(2);
     expect(result.totalClassified).toBe(tabCount);
 
@@ -219,7 +219,7 @@ describe("classifyAllOpenTabs", () => {
     ]);
     net.queueResponse({ status: 500, body: { error: "boom" } });
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
 
     expect(result.totalClassified).toBe(0);
     expect(result.totalErrors).toBe(1);
@@ -239,7 +239,7 @@ describe("classifyAllOpenTabs", () => {
       body: toolResponse([{ tab_id: 1, group_name: "X", color: "blue" }]),
     });
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
 
     // Only the normal window's batch is sent.
     expect(net.requests).toHaveLength(1);
@@ -279,7 +279,7 @@ describe("classifyAllOpenTabs", () => {
       return originalGroup(options);
     });
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
 
     // Both windows were attempted; only window 10 actually grouped.
     expect(result.windows).toHaveLength(2);
@@ -293,7 +293,7 @@ describe("classifyAllOpenTabs", () => {
     ]);
     // No queued response — fetch should never be called.
 
-    const result = await classifyAllOpenTabs({ language: "en" });
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
 
     expect(result.totalClassified).toBe(0);
     expect(result.totalErrors).toBe(1);
