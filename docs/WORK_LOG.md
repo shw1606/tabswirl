@@ -92,6 +92,24 @@
 
 ---
 
+## TBD-anthropic — 2026-05-12 KST
+**feat(llm): anthropic.ts with classifyInitial / classifyIncremental**
+
+- **PRD §14 단계:** 5번
+- **핵심 변경:**
+  - `src/llm/anthropic.ts` — raw `fetch`로 Anthropic Messages API 호출. 헤더 3종(`x-api-key`, `anthropic-version: 2023-06-01`, `anthropic-dangerous-direct-browser-access: true`). `tool_choice`로 `classify_tabs` tool 강제. BYOK 키는 `chrome.storage.local`의 `byok:anthropic`에서 읽음.
+  - 응답 검증 4개(CLAUDE.md §5): tab_id 존재 / color enum / 그룹명-color 일관성 / assignments 길이. 추가로 duplicate tab_id도 reject.
+  - 결과는 tagged result (`ok: true | false` + `kind`). 호출자가 ungrouped fallback 결정. 모듈은 never throws.
+  - `tests/llm/anthropic.test.ts` — 11 케이스 (happy / missing-key / network / http / no-tool-call / validation 5종 / incremental).
+  - `tests/helpers/fetch-mock.ts` — `vi.stubGlobal("fetch", ...)` 헬퍼. 큐 기반 응답 + 요청 기록.
+- **결정:**
+  - SDK 미사용 (CLAUDE.md §6.1 mandate). MV3 SW 번들 크기 최소.
+  - 응답 파싱은 unknown-first 패턴. content 블록 타입을 좁히지 않고 `Record<string, unknown>`으로 캐스팅 후 필드별 검사. 외부 API 응답을 신뢰하지 않음.
+  - validation에서 duplicate tab_id를 명시적으로 reject — 같은 탭을 두 그룹에 넣는 모델 환각 방지.
+- **검증:** `pnpm test` 20/20 통과 (기존 9 + 신규 11). `pnpm typecheck` 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
