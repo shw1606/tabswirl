@@ -397,6 +397,20 @@
 
 ---
 
+## c06e16b — 2026-05-13 00:15 KST
+**chore(icons): swap in revised source — darker / bolder lines, tighter frame**
+
+- **상황:** 사용자가 아이콘 소스를 수정해서 가져옴 (`assets/icon-source-revised.png`). 기존 대비 라인이 더 진한 navy + 굵어짐, rounded square가 frame을 더 채워서 회색 padding 감소.
+- **PRD §14 단계:** 해당 없음 (UX polish 이터레이션).
+- **핵심 변경:**
+  - `assets/icon-source.png` 교체 (1280×1280 유지, 1.2MB → 718KB로 압축률 좋아짐).
+  - `public/icons/icon-128.png`, `icon-48.png` — 1280 소스에서 직접 `sips -z` (개선된 라인이 충분히 진해서 직접 다운샘플 OK).
+  - `public/icons/icon-32.png` — 900×900 tight crop 후 `sips -z 32`.
+  - `public/icons/icon-16.png` — 720×720 tighter crop 후 `sips -z 16`. 여전히 soft하지만 silhouette은 보임. sips로는 thin-line art의 16px가 한계 — imagemagick으로 더 좋은 resampling 가능하지만 미설치.
+- **검증:** build 깨끗, 126/126 그대로 (아이콘 변경은 코드 테스트와 무관).
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
