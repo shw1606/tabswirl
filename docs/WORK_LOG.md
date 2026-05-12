@@ -70,12 +70,24 @@
 
 ---
 
-## 31fd580 — 2026-05-12 (작업 진행 중)
+## 31fd580 — 2026-05-12 09:55 KST
 **docs: add WORK_LOG.md with retrospective entries for commits so far**
 
 - **PRD §14 단계:** 해당 없음 (메타 문서)
 - **핵심 변경:** `docs/WORK_LOG.md` 신설. 이 시점까지의 4개 커밋을 회고적으로 기록.
 - **결정:** 초기 버전은 역시간순으로 작성했으나 사용자 피드백을 받아 다음 커밋에서 정순으로 재정렬.
+- **검증:** 해당 없음.
+
+---
+
+## b13c024 — 2026-05-12 10:01 KST
+**docs: reorder WORK_LOG chronologically + codify commit/log rhythm**
+
+- **PRD §14 단계:** 해당 없음 (메타 문서·운영 규칙)
+- **핵심 변경:**
+  - `docs/WORK_LOG.md` — 역시간순 → 정순 재정렬. 상단 "기록 규칙"에 "맨 아래에 추가" 명시.
+  - `CLAUDE.md` — "Working rhythm — 커밋 단위 작업 + WORK_LOG" 섹션 신설. 작업을 의미 있는 커밋 단위로 쪼개고, 커밋 직후 WORK_LOG에 항목을 추가한다는 규칙 코드화.
+- **결정:** WORK_LOG 추가분은 같은 커밋에 포함하거나 별도 커밋 둘 다 허용. 단, 시간 간격은 짧게.
 - **검증:** 해당 없음.
 
 ---
