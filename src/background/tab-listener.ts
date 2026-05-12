@@ -54,6 +54,7 @@ async function handleTabUpdate(
   const settings = await getSettings();
   if (!settings.autoClassifyEnabled) return;
 
+  const tDispatch = performance.now();
   await enqueueTab({
     tabId,
     windowId: tab.windowId,
@@ -63,6 +64,14 @@ async function handleTabUpdate(
     model: settings.llmModel,
     provider: settings.llmProvider,
   });
+  // Listener-side overhead (settings read + filters + enqueue) — usually
+  // small but worth surfacing when something stalls.
+  const dt = Math.round(performance.now() - tDispatch);
+  if (dt > 30) {
+    console.log(
+      `[tabswirl:timing] onUpdated→enqueueTab(tab=${tabId}) ${dt}ms (listener overhead)`,
+    );
+  }
 }
 
 /**

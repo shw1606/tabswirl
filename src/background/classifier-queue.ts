@@ -111,6 +111,7 @@ function scheduleFlush(
 export async function enqueueTab(
   input: EnqueueInput,
 ): Promise<{ path: EnqueuePath }> {
+  const tEnter = performance.now();
   const domain = extractDomain(input.url);
 
   // FAST PATH — domain cache hit. Try to join the cached group; if it
@@ -131,6 +132,11 @@ export async function enqueueTab(
         categoryName: cached.categoryName,
         color: cached.color,
       });
+      console.log(
+        `[tabswirl:timing] fast-path tab=${input.tabId} ${domain} → group=${cached.groupId} (${Math.round(
+          performance.now() - tEnter,
+        )}ms)`,
+      );
       return { path: "cache-hit" };
     }
     console.debug(
@@ -152,6 +158,11 @@ export async function enqueueTab(
     model: input.model,
     provider: input.provider,
   });
+  console.log(
+    `[tabswirl:timing] queued tab=${input.tabId} ${domain} (enqueue=${Math.round(
+      performance.now() - tEnter,
+    )}ms, debounce=${DEBOUNCE_MS}ms)`,
+  );
   return { path: "queued" };
 }
 
@@ -159,8 +170,11 @@ async function flushWindow(
   windowId: number,
   options: FlushOptions,
 ): Promise<void> {
+  const tFlushStart = performance.now();
+
   const queue = await readQueue(windowId);
   if (queue.tabs.length === 0) return;
+  const tabCount = queue.tabs.length;
 
   // Whatever happens below, the queue is consumed exactly once. Tabs
   // that fail to classify silently fall back to ungrouped per PRD §6.3.
@@ -175,7 +189,9 @@ async function flushWindow(
     return;
   }
 
+  const tBeforeSnap = performance.now();
   const snapshot = await snapshotWindowGroups(windowId);
+  const tAfterSnap = performance.now();
 
   const existingGroups: ExistingGroup[] = snapshot.map((g) => ({
     name: g.name,
@@ -192,8 +208,19 @@ async function flushWindow(
     domain: t.domain,
   }));
 
+  const tBeforeLlm = performance.now();
   const result = await classifyIncremental(existingGroups, tabInputs, options);
-  if (!result.ok) return;
+  const tAfterLlm = performance.now();
+
+  if (!result.ok) {
+    console.log(
+      `[tabswirl:timing] flush(window=${windowId} tabs=${tabCount}) LLM FAILED ` +
+        `(${result.error.kind}) snapshot=${Math.round(tAfterSnap - tBeforeSnap)}ms ` +
+        `llm=${Math.round(tAfterLlm - tBeforeLlm)}ms ` +
+        `total=${Math.round(tAfterLlm - tFlushStart)}ms`,
+    );
+    return;
+  }
 
   const groupIdByName = new Map<string, number>();
   const colorByName = new Map<string, ChromeGroupColor>();
@@ -241,6 +268,15 @@ async function flushWindow(
       })),
     );
   }
+
+  const tEnd = performance.now();
+  console.log(
+    `[tabswirl:timing] flush(window=${windowId} tabs=${tabCount}) ` +
+      `snapshot=${Math.round(tAfterSnap - tBeforeSnap)}ms ` +
+      `llm=${Math.round(tAfterLlm - tBeforeLlm)}ms ` +
+      `apply=${Math.round(tEnd - tAfterLlm)}ms ` +
+      `total=${Math.round(tEnd - tFlushStart)}ms`,
+  );
 }
 
 /**
