@@ -159,19 +159,34 @@
 
 ---
 
+## d707189 — 2026-05-12 19:33 KST
+**feat(background): initial-classifier — bulk classify all open tabs (M2)**
+
+- **PRD §14 단계:** 8번 / **CLAUDE.md 마일스톤 M2 종료**
+- **핵심 변경:**
+  - `src/background/initial-classifier.ts` — `classifyAllOpenTabs(options)`. 모든 윈도우 enumerate → `isClassifiable` 필터 → 윈도우별로 `CHUNK_SIZE=30`씩 청크 분할 → 청크마다 `classifyInitial` 호출 → 응답을 group_name별 버킷화 → `applyGroup` 호출 → `seedDomainEntries`로 캐시 시드.
+  - 같은 group_name이 청크 1과 청크 2에 모두 등장하면 첫 청크의 groupId를 재사용해 한 그룹으로 합침. 컬러도 첫 청크의 결정을 보존.
+  - 실패 시(missing-key / http / validation) 조용히 fallback, 탭은 ungrouped 유지. PRD §6.3 mandate.
+  - `tests/background/initial-classifier.test.ts` — 6 케이스 (happy / `isClassifiable` 필터 / 윈도우 격리 / 멀티 청크 그룹 통합 / http 에러 fallback / missing-key fallback).
+- **결정:**
+  - 청크 간 group_name 통합은 윈도우 단위로만. 윈도우 경계를 넘는 통합은 안 함 — 그룹은 윈도우 단위로만 존재.
+  - LLM이 두 번째 청크에서 같은 이름에 다른 컬러를 줘도 첫 컬러를 사용 (`namedColors`). 일관성 우선.
+- **검증:** 57/57 통과, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
 - **PRD §6.6의 폴더 이름 오기:** `tabpouch/` → `tabswirl/`. 순수 표기 문제.
-- **`pnpm build` 미가용:** 매니페스트가 가리키는 entry point들이 아직 없어 빌드 불가. PRD §14 단계 5~11 진행하며 자연스럽게 해소된다.
+- **`pnpm build` 미가용:** 매니페스트가 가리키는 entry point들(`src/popup/index.html`, `src/options/index.html`, `src/background/service-worker.ts`)이 아직 없어 빌드 불가. PRD §14 단계 10~11 진행하며 자연스럽게 해소된다.
 
 ---
 
-## 다음 단계 — PRD §14 5번
+## 다음 단계 — PRD §14 9번
 
-`src/llm/anthropic.ts` 작성. 요구:
-- raw `fetch`로 `https://api.anthropic.com/v1/messages` 호출 (SDK 미사용).
-- 필수 헤더: `anthropic-version: 2023-06-01`, `anthropic-dangerous-direct-browser-access: true`, `x-api-key`.
-- BYOK 키는 `chrome.storage.local`의 `byok:anthropic`에서 읽음.
-- 응답의 tool_use 블록을 PRD/CLAUDE.md §5의 4개 검증 (`tab_id` 존재, color enum, 그룹명-color 일관성, assignments 길이)으로 게이트.
-- 실패 시 조용히 ungrouped fallback — crash 금지.
+`src/background/classifier-queue.ts` (incremental classify의 디바운스 + 배치). 요구:
+- 500ms 디바운스 윈도우로 새 탭들을 모은 뒤 한 번에 LLM 호출 (PRD §6.3).
+- 큐 상태를 `chrome.storage.session`에 persist — MV3 SW가 30초 idle 후 죽어도 깨어났을 때 큐 재구성 (CLAUDE.md "Critical invariants" §4).
+- 빠른 경로: `getDomainEntry` hit → LLM 호출 없이 즉시 `addTabsToGroup`.
+- 느린 경로: 캐시 miss → 큐 → 배치 → `classifyIncremental(snapshotWindowGroups, batch)` → `applyGroup` / `setDomainEntry`.
