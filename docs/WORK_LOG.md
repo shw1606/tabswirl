@@ -216,6 +216,22 @@
 
 ---
 
+## b7a5f32 — 2026-05-12 19:41 KST
+**feat(core,background): stash + restore + messaging primitives**
+
+- **PRD §14 단계:** 12·13·15번 로직 부분 (UI는 별개 커밋).
+- **핵심 변경:**
+  - `src/core/stash.ts` — `buildPouchBody`(순수 변환) + `stashTabs`(IO). Selection을 chrome.tabGroups 상태에 따라 SavedGroup/ungrouped로 버킷화. `closeTabs` 옵션(default true)이면 `chrome.tabs.remove`.
+  - `src/background/restore.ts` — `restorePouch(pouchId, {windowId?})`. PRD §8.3 흐름: getPouch → 각 group마다 chrome.tabs.create + 즉시 `markRestoring` → `applyGroup` → ungrouped도 동일 → `removePouch`(부분 실패에도 consume — P0 시맨틱) → 1.5초 뒤 `unmarkRestoring`.
+  - `src/core/messaging.ts` — `RestoreRequest` / `RestoreResponse` + `sendRestorePouch(pouchId)` 헬퍼. throw를 tagged response로 변환.
+  - 헬퍼 강화: `tests/helpers/chrome-tabs.ts`에 `chrome.tabs.create` / `chrome.tabs.remove` 추가.
+- **결정:**
+  - **부분 실패에도 pouch consume:** 일부 탭이 chrome.tabs.create에서 실패해도 pouch는 삭제. 남겨두면 "사용자가 꺼냈는데 영수증이 그대로" 상황 — 제품 정의 위반.
+  - `markRestoring`은 생성된 tab id를 받자마자 동기 호출. `await chrome.tabs.create` resolve와 markRestoring 호출 사이엔 microtask gap 없음 — onUpdated가 발화하기 전에 set에 들어가 있음.
+- **검증:** 87/87 통과, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
