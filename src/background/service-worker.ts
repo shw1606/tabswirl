@@ -9,7 +9,12 @@
 //     event handlers below are the only thing that survives across naps.
 
 import { getSettings } from "../core/settings";
-import type { RestoreRequest, RestoreResponse } from "../core/messaging";
+import type {
+  ClassifyAllRequest,
+  ClassifyAllResponse,
+  RestoreRequest,
+  RestoreResponse,
+} from "../core/messaging";
 import { rehydrateQueue } from "./classifier-queue";
 import { classifyAllOpenTabs } from "./initial-classifier";
 import { restorePouch } from "./restore";
@@ -46,26 +51,45 @@ chrome.runtime.onStartup.addListener(() => {
 // Promise inside a message listener.
 // Ref: https://developer.chrome.com/docs/extensions/develop/concepts/messaging#simple
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (
-    !message ||
-    typeof message !== "object" ||
-    (message as { type?: unknown }).type !== "restore-pouch"
-  ) {
-    return false;
+  if (!message || typeof message !== "object") return false;
+  const type = (message as { type?: unknown }).type;
+
+  if (type === "restore-pouch") {
+    const req = message as RestoreRequest;
+    void (async () => {
+      const outcome = await restorePouch(req.pouchId);
+      const response: RestoreResponse = outcome.ok
+        ? {
+            ok: true,
+            tabsOpened: outcome.tabsOpened,
+            groupsOpened: outcome.groupsOpened,
+          }
+        : { ok: false, reason: outcome.reason };
+      sendResponse(response);
+    })();
+    return true;
   }
-  const req = message as RestoreRequest;
-  void (async () => {
-    const outcome = await restorePouch(req.pouchId);
-    const response: RestoreResponse = outcome.ok
-      ? {
-          ok: true,
-          tabsOpened: outcome.tabsOpened,
-          groupsOpened: outcome.groupsOpened,
-        }
-      : { ok: false, reason: outcome.reason };
-    sendResponse(response);
-  })();
-  return true;
+
+  if (type === "classify-all-tabs") {
+    void (message as ClassifyAllRequest);
+    void (async () => {
+      const settings = await getSettings();
+      const outcome = await classifyAllOpenTabs({
+        language: settings.language,
+        model: settings.llmModel,
+      });
+      const response: ClassifyAllResponse = {
+        ok: true,
+        totalClassified: outcome.totalClassified,
+        totalErrors: outcome.totalErrors,
+        windowsTouched: outcome.windows.length,
+      };
+      sendResponse(response);
+    })();
+    return true;
+  }
+
+  return false;
 });
 
 // Bare event registrations above keep this SW awake just long enough

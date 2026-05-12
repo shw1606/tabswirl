@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sendClassifyAll } from "../core/messaging";
 import { DEFAULT_SETTINGS, getSettings, setSettings } from "../core/settings";
 import type { Settings } from "../core/types";
 
@@ -8,6 +9,8 @@ export function App() {
   const [apiKey, setApiKey] = useState("");
   const [settings, setLocalSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [status, setStatus] = useState<string | null>(null);
+  const [classifying, setClassifying] = useState(false);
+  const [classifyResult, setClassifyResult] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -44,6 +47,21 @@ export function App() {
     const next = await setSettings({ [key]: value } as Partial<Settings>);
     setLocalSettings(next);
     setStatus("Saved.");
+  };
+
+  const handleClassifyAll = async () => {
+    setClassifying(true);
+    setClassifyResult("Classifying… (watch the SW devtools console for details)");
+    const result = await sendClassifyAll();
+    if (result.ok) {
+      setClassifyResult(
+        `Done. Classified ${result.totalClassified} tab(s) across ` +
+          `${result.windowsTouched} window(s). Errors: ${result.totalErrors}.`,
+      );
+    } else {
+      setClassifyResult(`Failed: ${result.reason}`);
+    }
+    setClassifying(false);
   };
 
   return (
@@ -99,6 +117,24 @@ export function App() {
           />
           Enable auto-classification of new tabs
         </label>
+        <div className="mt-3 rounded-md border border-neutral-200 bg-white p-3">
+          <p className="text-xs text-neutral-600">
+            Auto-classification of <em>already-open</em> tabs only runs once
+            on install. If you set the API key after installing, click below
+            to classify your current windows now.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleClassifyAll()}
+            disabled={classifying}
+            className="mt-2 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:bg-neutral-300"
+          >
+            {classifying ? "Classifying…" : "Re-classify all open tabs now"}
+          </button>
+          {classifyResult && (
+            <div className="mt-2 text-xs text-neutral-700">{classifyResult}</div>
+          )}
+        </div>
       </section>
 
       <section className="mt-6">

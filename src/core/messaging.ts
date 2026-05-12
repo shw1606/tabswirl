@@ -7,7 +7,7 @@
 //
 // Ref: https://developer.chrome.com/docs/extensions/develop/concepts/messaging
 
-export type Request = RestoreRequest;
+export type Request = RestoreRequest | ClassifyAllRequest;
 
 export interface RestoreRequest {
   type: "restore-pouch";
@@ -16,6 +16,14 @@ export interface RestoreRequest {
 
 export type RestoreResponse =
   | { ok: true; tabsOpened: number; groupsOpened: number }
+  | { ok: false; reason: string };
+
+export interface ClassifyAllRequest {
+  type: "classify-all-tabs";
+}
+
+export type ClassifyAllResponse =
+  | { ok: true; totalClassified: number; totalErrors: number; windowsTouched: number }
   | { ok: false; reason: string };
 
 export async function sendRestorePouch(
@@ -30,6 +38,19 @@ export async function sendRestorePouch(
     if (!response) {
       return { ok: false, reason: "no-response" };
     }
+    return response;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason: message };
+  }
+}
+
+export async function sendClassifyAll(): Promise<ClassifyAllResponse> {
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      type: "classify-all-tabs",
+    } satisfies ClassifyAllRequest)) as ClassifyAllResponse | undefined;
+    if (!response) return { ok: false, reason: "no-response" };
     return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

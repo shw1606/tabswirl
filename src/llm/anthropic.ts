@@ -235,11 +235,17 @@ async function callAnthropic(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.warn("[tabswirl] anthropic network error:", message);
     return { ok: false, error: { kind: "network", message } };
   }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
+    console.warn(
+      "[tabswirl] anthropic http error",
+      response.status,
+      text.slice(0, 500),
+    );
     return {
       ok: false,
       error: { kind: "http", status: response.status, body: text },
@@ -262,6 +268,10 @@ async function classify(
 ): Promise<ClassifyResult> {
   const apiKey = await getApiKey();
   if (!apiKey) {
+    console.warn(
+      "[tabswirl] no BYOK key set — classification skipped. " +
+        "Set one via the options page (chrome.storage.local['byok:anthropic']).",
+    );
     return { ok: false, error: { kind: "missing-key" } };
   }
 
@@ -272,11 +282,13 @@ async function classify(
 
   const toolInput = extractToolInput(call.response);
   if (!toolInput) {
+    console.warn("[tabswirl] anthropic returned no tool_use block");
     return { ok: false, error: { kind: "no-tool-call" } };
   }
 
   const validated = validateAssignments(toolInput, expectedTabIds);
   if (!validated.ok) {
+    console.warn("[tabswirl] validation failed:", validated.reason);
     return {
       ok: false,
       error: { kind: "validation", reason: validated.reason },
