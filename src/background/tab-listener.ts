@@ -61,6 +61,7 @@ async function handleTabUpdate(
     url: tab.url ?? "",
     language: settings.language,
     model: settings.llmModel,
+    provider: settings.llmProvider,
   });
 }
 

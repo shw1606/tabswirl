@@ -1,5 +1,7 @@
-// All LLM traffic goes through this module. (CLAUDE.md "Critical
-// invariants" §5.) No other file may call api.anthropic.com directly.
+// Anthropic implementation of LlmProvider. All api.anthropic.com
+// traffic lives here. (CLAUDE.md "Critical invariants" §5.) Callers
+// should NOT import this file directly — go through src/llm/provider.ts
+// so we can swap or add providers without touching the call sites.
 //
 // Wire protocol: raw `fetch` against the Anthropic Messages API with
 // tool use. The SDK is intentionally not used — the MV3 service worker
@@ -30,9 +32,15 @@ import {
   type ClassificationAssignment,
   type ClassifyTabsToolInput,
   type ExistingGroup,
-  type Language,
   type TabInput,
 } from "./prompts";
+// Types-only import — keeps the runtime cycle with provider.ts inert.
+import type {
+  ClassifyError,
+  ClassifyOptions,
+  ClassifyResult,
+  LlmProvider,
+} from "./provider";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -49,24 +57,6 @@ const ALLOWED_COLORS: ReadonlySet<string> = new Set<ChromeGroupColor>([
   "cyan",
   "orange",
 ]);
-
-export type ClassifyError =
-  | { kind: "missing-key" }
-  | { kind: "network"; message: string }
-  | { kind: "http"; status: number; body: string }
-  | { kind: "no-tool-call" }
-  | { kind: "validation"; reason: string };
-
-export type ClassifyResult =
-  | { ok: true; assignments: ClassificationAssignment[] }
-  | { ok: false; error: ClassifyError };
-
-export interface ClassifyOptions {
-  language: Language;
-  model?: string;
-  /** Optional cancellation, e.g. when the SW is about to terminate. */
-  signal?: AbortSignal;
-}
 
 // ============================================================
 // BYOK key
@@ -322,3 +312,13 @@ export async function classifyIncremental(
     options,
   );
 }
+
+/**
+ * LlmProvider implementation. Imported by src/llm/provider.ts's
+ * getProvider factory.
+ */
+export const anthropicProvider: LlmProvider = {
+  name: "anthropic",
+  classifyInitial,
+  classifyIncremental,
+};

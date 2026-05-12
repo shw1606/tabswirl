@@ -33,6 +33,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       await classifyAllOpenTabs({
         language: settings.language,
         model: settings.llmModel,
+        provider: settings.llmProvider,
       });
     }
   })();
@@ -44,6 +45,7 @@ chrome.runtime.onStartup.addListener(() => {
     await rehydrateQueue({
       language: settings.language,
       model: settings.llmModel,
+      provider: settings.llmProvider,
     });
   })();
 });
@@ -79,6 +81,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       const outcome = await classifyAllOpenTabs({
         language: settings.language,
         model: settings.llmModel,
+        provider: settings.llmProvider,
       });
       const response: ClassifyAllResponse = {
         ok: true,

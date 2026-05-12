@@ -11,8 +11,8 @@
 
 import { extractDomain, isClassifiable } from "../core/tabs";
 import type { ChromeGroupColor } from "../core/types";
-import { classifyInitial } from "../llm/anthropic";
 import type { Language, TabInput } from "../llm/prompts";
+import { classifyInitial, type LlmProviderName } from "../llm/provider";
 import { seedDomainEntries } from "./domain-cache";
 import { applyGroup } from "./group-manager";
 
@@ -36,6 +36,7 @@ export interface ClassifyAllResult {
 interface RunOptions {
   language: Language;
   model?: string;
+  provider?: LlmProviderName;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -95,10 +96,7 @@ async function classifyOneWindow(
   const namedColors = new Map<string, ChromeGroupColor>();
 
   for (const batch of chunk(tabs, CHUNK_SIZE)) {
-    const llm = await classifyInitial(
-      batch.map((t) => t.input),
-      { language: options.language, model: options.model },
-    );
+    const llm = await classifyInitial(batch.map((t) => t.input), options);
 
     if (!llm.ok) {
       result.errors += batch.length;

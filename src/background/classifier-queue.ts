@@ -15,8 +15,8 @@
 
 import { extractDomain } from "../core/tabs";
 import type { ChromeGroupColor } from "../core/types";
-import { classifyIncremental } from "../llm/anthropic";
 import type { ExistingGroup, Language, TabInput } from "../llm/prompts";
+import { classifyIncremental, type LlmProviderName } from "../llm/provider";
 import {
   getDomainEntry,
   seedDomainEntries,
@@ -47,6 +47,7 @@ interface WindowQueueState {
 interface FlushOptions {
   language: Language;
   model?: string;
+  provider?: LlmProviderName;
 }
 
 export interface EnqueueInput {
@@ -56,6 +57,7 @@ export interface EnqueueInput {
   url: string;
   language: Language;
   model?: string;
+  provider?: LlmProviderName;
 }
 
 export type EnqueuePath = "cache-hit" | "queued";
@@ -136,6 +138,7 @@ export async function enqueueTab(
   scheduleFlush(input.windowId, DEBOUNCE_MS, {
     language: input.language,
     model: input.model,
+    provider: input.provider,
   });
   return { path: "queued" };
 }
