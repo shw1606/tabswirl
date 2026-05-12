@@ -92,8 +92,8 @@
 
 ---
 
-## TBD-anthropic — 2026-05-12 KST
-**feat(llm): anthropic.ts with classifyInitial / classifyIncremental**
+## 648fcdd — 2026-05-12 19:29 KST
+**feat(llm): anthropic.ts — Messages API + tool-use validation (PRD §14 #5)**
 
 - **PRD §14 단계:** 5번
 - **핵심 변경:**
