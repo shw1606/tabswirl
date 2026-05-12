@@ -423,6 +423,24 @@
 
 ---
 
+## 4a34201 — 2026-05-13 00:28 KST
+**chore(classifier): instrument timing logs for delay diagnosis**
+
+- **상황:** 사용자가 새 탭 → 자동 분류 반응이 느리다고 보고. 어디서 시간이 나가는지 측정 안 한 채로 추측만 하면 위약 효과로 끝날 위험. 진단 로그부터 박음.
+- **PRD §14 단계:** 해당 없음.
+- **핵심 변경 (`src/background/classifier-queue.ts`):**
+  - **Fast path:** 캐시 hit + addTabsToGroup 시간 → `[tabswirl:timing] fast-path tab=X domain → group=Y (Nms)`.
+  - **Slow path enqueue:** queue 진입 시간 + debounce 안내 → `[tabswirl:timing] queued tab=X domain (enqueue=Nms, debounce=500ms)`.
+  - **Flush summary:** snapshot · LLM · apply 단계별 + total → `[tabswirl:timing] flush(window=X tabs=Y) snapshot=Ams llm=Bms apply=Cms total=Dms`.
+  - 실패 시 (LLM error 등): `... LLM FAILED (kind) snapshot=...ms llm=...ms total=...ms`.
+- **핵심 변경 (`src/background/tab-listener.ts`):**
+  - listener 진입 → enqueueTab 호출 사이 overhead가 30ms 넘으면 로그. 평상시엔 silent.
+- **결정:** `performance.now()` 사용 (sub-ms 정밀도). `console.log` (Info level, devtools 기본 표시).
+- **다음:** 사용자가 새 탭 몇 번 열어서 SW devtools 콘솔의 `[tabswirl:timing]` 로그 보고 가장 큰 항목 식별. 그 다음 타깃 최적화(디바운스 단축·onUpdated 조기 발화·기타).
+- **검증:** 126/126, typecheck·build 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
