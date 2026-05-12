@@ -51,6 +51,7 @@ export function installChromeTabsMock(): ChromeTabsMock {
   const tabs = new Map<number, FakeTab>();
   const groups = new Map<number, FakeGroup>();
   let nextGroupId = 1000;
+  let nextAutoTabId = 9000;
   const onUpdatedListeners = new Set<OnUpdatedListener>();
 
   function fakeTabToChromeTab(t: FakeTab): chrome.tabs.Tab {
@@ -126,6 +127,27 @@ export function installChromeTabsMock(): ChromeTabsMock {
         if (tab) tab.groupId = -1;
       }
     }),
+
+    remove: vi.fn(async (tabIds: number | number[]): Promise<void> => {
+      const list = Array.isArray(tabIds) ? tabIds : [tabIds];
+      for (const id of list) tabs.delete(id);
+    }),
+
+    create: vi.fn(
+      async (props: chrome.tabs.CreateProperties): Promise<chrome.tabs.Tab> => {
+        const id = nextAutoTabId++;
+        const windowId = props.windowId ?? 1;
+        const tab: FakeTab = {
+          id,
+          windowId,
+          groupId: -1,
+          title: "",
+          url: props.url ?? "",
+        };
+        tabs.set(id, tab);
+        return fakeTabToChromeTab(tab);
+      },
+    ),
 
     query: vi.fn(
       async (query: chrome.tabs.QueryInfo): Promise<chrome.tabs.Tab[]> => {
