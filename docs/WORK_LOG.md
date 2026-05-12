@@ -197,6 +197,25 @@
 
 ---
 
+## 605e0da — 2026-05-12 19:38 KST
+**feat(background): tab-listener + service-worker entry (M4)**
+
+- **PRD §14 단계:** 10번 / **CLAUDE.md 마일스톤 M4 종료**
+- **핵심 변경:**
+  - `src/background/tab-listener.ts` — `chrome.tabs.onUpdated` 리스너. `status === "complete"`일 때만 발화. 3단계 필터: `isRestoring` (CLAUDE.md §3) → `isClassifiable` → `settings.autoClassifyEnabled`. 통과하면 `enqueueTab`.
+    - `markRestoring([ids])` / `unmarkRestoring([ids])` / `isRestoring(id)` — Restore 흐름(M7)이 사용할 hooks.
+    - `registerTabListener()`는 idempotent.
+  - `src/background/service-worker.ts` — MV3 진입점. 모듈 로드 시 `registerTabListener()`. `chrome.runtime.onInstalled`(install·update)에서 `classifyAllOpenTabs` 실행, `chrome.runtime.onStartup`에서 `rehydrateQueue`.
+  - `src/core/settings.ts` — `settings:main` 단일 read/write. `DEFAULT_SETTINGS.autoClassifyEnabled = true` (PRD §13).
+  - `tests/helpers/chrome-tabs.ts` — `chrome.tabs.onUpdated` 추가. 테스트에서 `fireOnUpdated(id, changeInfo)`로 합성 이벤트 발화.
+  - `tests/background/tab-listener.test.ts` — 7 케이스.
+- **결정·발견:**
+  - 합성 이벤트의 async dispatch chain이 `await Promise.resolve()` 몇 번으로 끝나지 않음. `setTimeout(r, 0)` 매크로태스크 한 번 + microtask 16회 flush 헬퍼로 안정화.
+  - **`pnpm build` 여전히 실패:** 매니페스트의 popup/options HTML entry가 없음. M5(팝업 UI)에서 자연스럽게 해소. SW entry point는 이제 resolvable.
+- **검증:** 73/73 통과, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
