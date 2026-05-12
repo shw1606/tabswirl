@@ -1,0 +1,72 @@
+// Core data model. Mirrors PRD §7 verbatim.
+//
+// Anything stored in chrome.storage must be structured-cloneable
+// (plain objects/arrays/primitives). No Map, Set, Date instances —
+// see CLAUDE.md "Common traps" §5.
+
+/**
+ * The nine colors chrome.tabGroups.update accepts. Any other value throws.
+ * Ref: https://developer.chrome.com/docs/extensions/reference/api/tabGroups#type-Color
+ */
+export type ChromeGroupColor =
+  | "grey"
+  | "blue"
+  | "red"
+  | "yellow"
+  | "green"
+  | "pink"
+  | "purple"
+  | "cyan"
+  | "orange";
+
+export interface SavedTab {
+  url: string;
+  title: string;
+  favIconUrl?: string;
+}
+
+export interface SavedGroup {
+  name: string;
+  color: ChromeGroupColor;
+  tabs: SavedTab[];
+}
+
+export interface UngroupedBucket {
+  tabs: SavedTab[];
+}
+
+/**
+ * A Pouch is the long-term-memory unit. Stored as `pouch:<id>` in
+ * chrome.storage.local; consumed (deleted) on Restore — see PRD §0,
+ * CLAUDE.md "Critical invariants" §2.
+ *
+ * Tabs hold `url`, not chrome tab id, because tab ids do not survive
+ * browser restart.
+ */
+export interface Pouch {
+  id: string;
+  createdAt: number;
+  label?: string;
+  sourceWindowTitle?: string;
+  groups: SavedGroup[];
+  ungrouped: UngroupedBucket;
+  totalTabs: number;
+}
+
+export interface Settings {
+  llmProvider: "anthropic";
+  llmModel: string;
+  autoClassifyEnabled: boolean;
+  /** When false, only domain (not full URL) is sent to the LLM. */
+  sendUrls: boolean;
+  confirmBeforeRestore: boolean;
+  confirmBeforeDiscard: boolean;
+  language: "ko" | "en";
+}
+
+export interface DomainCacheEntry {
+  groupId: number;
+  categoryName: string;
+  color: ChromeGroupColor;
+  lastUsed: number;
+}
