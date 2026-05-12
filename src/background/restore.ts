@@ -27,19 +27,41 @@ export type RestoreOutcome =
   | { ok: false; reason: string };
 
 interface RestoreOptions {
-  /** Target window. Defaults to the last focused window. */
+  /** Target window. Defaults to a "normal" window (last focused if possible). */
   windowId?: number;
 }
 
+/**
+ * Pick a window that can actually host tabs and groups. Prefers
+ * `override` when provided, then the last-focused window if it's
+ * normal, then any other normal window.
+ *
+ * Throws if no normal window exists at all (which can happen when
+ * only PWAs are open).
+ */
 async function resolveTargetWindow(
   override: number | undefined,
 ): Promise<number> {
   if (typeof override === "number") return override;
-  const focused = await chrome.windows.getLastFocused();
-  if (typeof focused.id !== "number") {
-    throw new Error("no focused window");
+
+  const allWindows = await chrome.windows.getAll();
+  const normalWindows = allWindows.filter(
+    (w) => w.type === "normal" && typeof w.id === "number",
+  );
+  if (normalWindows.length === 0) {
+    throw new Error("no normal window available");
   }
-  return focused.id;
+
+  const focused = await chrome.windows.getLastFocused().catch(() => null);
+  if (
+    focused &&
+    typeof focused.id === "number" &&
+    normalWindows.some((w) => w.id === focused.id)
+  ) {
+    return focused.id;
+  }
+
+  return normalWindows[0]!.id as number;
 }
 
 export async function restorePouch(

@@ -12,6 +12,7 @@
 import { isClassifiable } from "../core/tabs";
 import { getSettings } from "../core/settings";
 import { enqueueTab } from "./classifier-queue";
+import { isGroupableWindow } from "./window-type";
 
 const restoringTabIds = new Set<number>();
 
@@ -44,6 +45,11 @@ async function handleTabUpdate(
 
   if (isRestoring(tabId)) return;
   if (!isClassifiable(tab)) return;
+
+  // Skip PWA / popup / app / panel / devtools windows up-front so we
+  // don't bother enqueuing a tab whose flush would later be rejected
+  // by chrome.tabs.group anyway.
+  if (!(await isGroupableWindow(tab.windowId))) return;
 
   const settings = await getSettings();
   if (!settings.autoClassifyEnabled) return;

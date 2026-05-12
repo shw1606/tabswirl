@@ -160,28 +160,57 @@ async function classifyOneWindow(
 }
 
 /**
- * Public entry point. Walks every window, classifies its tabs, creates
- * chrome tab groups, and seeds the domain cache. Safe to call multiple
- * times — currently classified tabs will simply be re-grouped under the
- * same name.
+ * Public entry point. Walks every browser window, classifies its tabs,
+ * creates chrome tab groups, and seeds the domain cache. Safe to call
+ * multiple times.
+ *
+ * Per-window isolation: only windows whose `type === "normal"` are
+ * processed. PWA / popup / app / panel / devtools windows are skipped
+ * silently — chrome.tabs.group would throw there. Each window's
+ * classification is wrapped in try/catch so a single window's failure
+ * cannot cascade to the others.
  */
 export async function classifyAllOpenTabs(
   options: RunOptions,
 ): Promise<ClassifyAllResult> {
-  const allTabs = await chrome.tabs.query({});
-  const byWindow = new Map<number, TabWithDomain[]>();
-
-  for (const t of allTabs) {
-    const candidate = toTabInput(t);
-    if (!candidate) continue;
-    const list = byWindow.get(candidate.windowId) ?? [];
-    list.push(candidate);
-    byWindow.set(candidate.windowId, list);
-  }
+  // chrome.windows.getAll with populate gives us tabs grouped by their
+  // owning window in one IPC, AND lets us read window.type for the
+  // groupable filter.
+  const allWindows = await chrome.windows.getAll({ populate: true });
 
   const windows: ClassifyWindowResult[] = [];
-  for (const [windowId, tabs] of byWindow) {
-    windows.push(await classifyOneWindow(windowId, tabs, options));
+
+  for (const win of allWindows) {
+    if (typeof win.id !== "number") continue;
+    if (win.type !== "normal") {
+      console.debug(
+        `[tabswirl] classifyAllOpenTabs: skipping window ${win.id} (type=${win.type})`,
+      );
+      continue;
+    }
+
+    const tabs = (win.tabs ?? [])
+      .map(toTabInput)
+      .filter((t): t is TabWithDomain => t !== null);
+
+    if (tabs.length === 0) continue;
+
+    try {
+      windows.push(await classifyOneWindow(win.id, tabs, options));
+    } catch (err) {
+      console.warn(
+        `[tabswirl] classifyAllOpenTabs: window ${win.id} crashed during classification:`,
+        err instanceof Error ? err.message : err,
+      );
+      windows.push({
+        windowId: win.id,
+        classified: 0,
+        groupsCreated: 0,
+        skipped: 0,
+        errors: tabs.length,
+      });
+      // Continue to the next window — per-window isolation.
+    }
   }
 
   return {

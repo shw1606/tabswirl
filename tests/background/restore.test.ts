@@ -1,26 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RESTORE_GUARD_MS, restorePouch } from "../../src/background/restore";
 import { _resetForTests, isRestoring, markRestoring } from "../../src/background/tab-listener";
+import { _resetForTests as resetWindowTypeCache } from "../../src/background/window-type";
 import { createPouch, getPouch } from "../../src/core/pouch-store";
 import { installChromeStorageMock } from "../helpers/chrome-storage";
 import { installChromeTabsMock, type ChromeTabsMock } from "../helpers/chrome-tabs";
 
-function installChromeWindowsMock(focusedWindowId: number): void {
-  const existing =
-    (globalThis as { chrome?: Record<string, unknown> }).chrome ?? {};
-  vi.stubGlobal("chrome", {
-    ...existing,
-    windows: {
-      getLastFocused: vi.fn(async () => ({ id: focusedWindowId })),
-    },
-  });
-}
-
 function setup(focusedWindowId = 10) {
   installChromeStorageMock();
   const tabs = installChromeTabsMock();
-  installChromeWindowsMock(focusedWindowId);
+  tabs.seedWindow(focusedWindowId, "normal");
+  tabs.setFocusedWindow(focusedWindowId);
   _resetForTests();
+  resetWindowTypeCache();
   return { tabs };
 }
 
@@ -143,7 +135,8 @@ describe("restorePouch", () => {
   });
 
   it("opens tabs into the last-focused window when windowId is omitted", async () => {
-    installChromeWindowsMock(42);
+    env.tabs.seedWindow(42, "normal");
+    env.tabs.setFocusedWindow(42);
 
     const pouch = await createPouch({
       groups: [
@@ -161,5 +154,48 @@ describe("restorePouch", () => {
     const newTabs = [...env.tabs.tabs.values()];
     expect(newTabs).toHaveLength(1);
     expect(newTabs[0]?.windowId).toBe(42);
+  });
+
+  it("falls back to a non-focused normal window when the focused one is a PWA", async () => {
+    env.tabs.windows.clear(); // forget the default seeded window
+    env.tabs.seedWindow(50, "app");
+    env.tabs.seedWindow(60, "normal");
+    env.tabs.setFocusedWindow(50);
+
+    const pouch = await createPouch({
+      groups: [
+        {
+          name: "G",
+          color: "blue",
+          tabs: [{ url: "https://x.example/", title: "X" }],
+        },
+      ],
+      ungrouped: { tabs: [] },
+    });
+
+    await restorePouch(pouch.id);
+
+    const newTabs = [...env.tabs.tabs.values()];
+    expect(newTabs).toHaveLength(1);
+    expect(newTabs[0]?.windowId).toBe(60); // not 50 (the PWA)
+  });
+
+  it("returns a tagged error when no normal window exists", async () => {
+    // Replace the helper-seeded normal window with an app one.
+    env.tabs.windows.clear();
+    env.tabs.seedWindow(70, "app");
+    env.tabs.setFocusedWindow(70);
+
+    const pouch = await createPouch({
+      groups: [],
+      ungrouped: { tabs: [{ url: "https://x.example/", title: "X" }] },
+    });
+
+    const result = await restorePouch(pouch.id);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/no normal window/);
+    // Pouch is NOT consumed if we never got to chrome.tabs.create.
+    expect(await getPouch(pouch.id)).not.toBeNull();
   });
 });

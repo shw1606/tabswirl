@@ -19,8 +19,10 @@ import { rehydrateQueue } from "./classifier-queue";
 import { classifyAllOpenTabs } from "./initial-classifier";
 import { restorePouch } from "./restore";
 import { registerTabListener } from "./tab-listener";
+import { registerWindowTypeListeners } from "./window-type";
 
 registerTabListener();
+registerWindowTypeListeners();
 
 chrome.runtime.onInstalled.addListener((details) => {
   void (async () => {

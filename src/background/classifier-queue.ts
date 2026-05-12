@@ -27,6 +27,7 @@ import {
   applyGroup,
   snapshotWindowGroups,
 } from "./group-manager";
+import { isGroupableWindow } from "./window-type";
 
 export const DEBOUNCE_MS = 500;
 const QUEUE_KEY_PREFIX = "queue:incremental:";
@@ -149,6 +150,15 @@ async function flushWindow(
   // Whatever happens below, the queue is consumed exactly once. Tabs
   // that fail to classify silently fall back to ungrouped per PRD §6.3.
   await writeQueue(windowId, { tabs: [], scheduledAt: 0 });
+
+  // PWA / popup / app windows can't host tab groups — there's no point
+  // calling the LLM for them. Drop the queue and move on.
+  if (!(await isGroupableWindow(windowId))) {
+    console.debug(
+      `[tabswirl] flushWindow: window ${windowId} is not groupable, skipping LLM call`,
+    );
+    return;
+  }
 
   const snapshot = await snapshotWindowGroups(windowId);
 

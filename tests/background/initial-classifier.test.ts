@@ -227,6 +227,66 @@ describe("classifyAllOpenTabs", () => {
     expect(env.tabs.tabs.get(1)?.groupId).toBe(-1);
   });
 
+  it("skips non-normal windows entirely (PWA / app / popup / panel / devtools)", async () => {
+    await env.storage.local.set({ "byok:anthropic": "sk-test" });
+    env.tabs.seedTabs([
+      { id: 1, windowId: 10, groupId: -1, title: "Normal", url: "https://normal.example/" },
+      { id: 2, windowId: 20, groupId: -1, title: "PWA", url: "https://gemini.example/" },
+    ]);
+    env.tabs.seedWindow(20, "app"); // override window 20 to be a PWA
+    net.queueResponse({
+      status: 200,
+      body: toolResponse([{ tab_id: 1, group_name: "X", color: "blue" }]),
+    });
+
+    const result = await classifyAllOpenTabs({ language: "en" });
+
+    // Only the normal window's batch is sent.
+    expect(net.requests).toHaveLength(1);
+    expect(result.windows.map((w) => w.windowId)).toEqual([10]);
+    // PWA tab is left ungrouped.
+    expect(env.tabs.tabs.get(2)?.groupId).toBe(-1);
+  });
+
+  it("isolates a crashing window from the rest (per-window try/catch)", async () => {
+    await env.storage.local.set({ "byok:anthropic": "sk-test" });
+    env.tabs.seedTabs([
+      { id: 1, windowId: 10, groupId: -1, title: "Win10", url: "https://w10.example/" },
+      { id: 2, windowId: 20, groupId: -1, title: "Win20", url: "https://w20.example/" },
+    ]);
+    // Window 10 succeeds.
+    net.queueResponse({
+      status: 200,
+      body: toolResponse([{ tab_id: 1, group_name: "X", color: "blue" }]),
+    });
+    // Window 20: LLM succeeds, but chrome.tabs.group throws as if it's a PWA
+    // that slipped past the filter (defense-in-depth path).
+    net.queueResponse({
+      status: 200,
+      body: toolResponse([{ tab_id: 2, group_name: "Y", color: "red" }]),
+    });
+
+    // Make chrome.tabs.group throw ONLY for window 20.
+    const chromeAny = (globalThis as unknown as {
+      chrome: { tabs: { group: ReturnType<typeof vi.fn> } };
+    }).chrome;
+    const originalGroup = chromeAny.tabs.group;
+    chromeAny.tabs.group = vi.fn(async (options: chrome.tabs.GroupOptions) => {
+      const wid = options.createProperties?.windowId;
+      if (wid === 20) {
+        throw new Error("Grouping is not supported by tabs in this window.");
+      }
+      return originalGroup(options);
+    });
+
+    const result = await classifyAllOpenTabs({ language: "en" });
+
+    // Both windows were attempted; only window 10 actually grouped.
+    expect(result.windows).toHaveLength(2);
+    expect(env.tabs.groups.size).toBe(1);
+    expect([...env.tabs.groups.values()][0]?.windowId).toBe(10);
+  });
+
   it("falls back silently when no BYOK key is set", async () => {
     env.tabs.seedTabs([
       { id: 1, windowId: 10, groupId: -1, title: "A", url: "https://a.example/" },

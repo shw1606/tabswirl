@@ -6,6 +6,7 @@ import {
   markRestoring,
   registerTabListener,
 } from "../../src/background/tab-listener";
+import { _resetForTests as resetWindowTypeCache } from "../../src/background/window-type";
 import { setSettings } from "../../src/core/settings";
 import { installChromeStorageMock } from "../helpers/chrome-storage";
 import {
@@ -36,6 +37,7 @@ describe("tab-listener", () => {
     env = setup();
     _resetForTests();
     _resetInMemoryTimers();
+    resetWindowTypeCache();
   });
 
   afterEach(() => {
@@ -127,6 +129,22 @@ describe("tab-listener", () => {
 
     const queue = await env.storage.session.get("queue:incremental:10");
     expect(queue["queue:incremental:10"]).toBeUndefined();
+  });
+
+  it("skips tabs that live in a non-groupable (PWA / app) window", async () => {
+    await env.storage.local.set({ "byok:anthropic": "sk-test" });
+    registerTabListener();
+    env.tabs.seedTabs([
+      { id: 1, windowId: 30, groupId: -1, title: "PWA Gemini", url: "https://gemini.example/" },
+    ]);
+    env.tabs.seedWindow(30, "app"); // mark as PWA
+
+    env.tabs.fireOnUpdated(1, { status: "complete" });
+    await waitForMicrotasks();
+
+    // No queue write because we short-circuited.
+    const queue = await env.storage.session.get("queue:incremental:30");
+    expect(queue["queue:incremental:30"]).toBeUndefined();
   });
 
   it("queues a cache-miss tab (slow path)", async () => {
