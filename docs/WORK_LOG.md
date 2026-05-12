@@ -110,6 +110,20 @@
 
 ---
 
+## 1cd51d7 — 2026-05-12 19:30 KST
+**feat(core): isClassifiable predicate + extractDomain helper**
+
+- **PRD §14 단계:** 14번을 미리 분리해 단일 진실 함수로. CLAUDE.md §6 mandate.
+- **핵심 변경:**
+  - `src/core/tabs.ts` — `isClassifiable(tab)` 술어. `incognito` / `pinned` / 내부 프로토콜 URL(`chrome://` `chrome-extension://` `about:` `edge://` `brave://` `opera://` `vivaldi://` `view-source:` `devtools://`) / 빈 title 거부. `extractDomain(url)` 헬퍼 — URL 파싱 실패 시 원본 반환.
+  - `tests/core/tabs.test.ts` — 15 케이스 (각 제외 사유, URL 파싱 fallback).
+- **결정:**
+  - 이 함수를 일찍 만들어두면 이후 단계(initial-classifier, tab-listener)에서 인라인 체크 유혹이 사라진다.
+  - 내부 프로토콜 리스트에 Chrome 외 브라우저 prefix도 포함 — 익스텐션이 Edge·Brave 등에서도 동작.
+- **검증:** 35/35 통과.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
