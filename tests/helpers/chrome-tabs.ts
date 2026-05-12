@@ -1,9 +1,11 @@
 // Mock for chrome.tabs.group / chrome.tabGroups.update / .query / chrome.tabs.query.
+// Also exposes a fakable chrome.tabs.onUpdated event for the tab-listener tests.
 //
 // Models the subset of behavior our code depends on:
 //   - chrome.tabs.group returns a numeric groupId (auto-incremented)
 //   - chrome.tabGroups.update sets title + color on the group
 //   - chrome.tabGroups.query / chrome.tabs.query filter by windowId
+//   - chrome.tabs.onUpdated.addListener can be triggered manually via fireOnUpdated
 //
 // Not modeled: cross-window grouping, autodiscard, etc.
 
@@ -27,17 +29,47 @@ export interface FakeGroup {
   color: ChromeGroupColor;
 }
 
+type OnUpdatedListener = (
+  tabId: number,
+  changeInfo: chrome.tabs.TabChangeInfo,
+  tab: chrome.tabs.Tab,
+) => void;
+
 export interface ChromeTabsMock {
   tabs: Map<number, FakeTab>;
   groups: Map<number, FakeGroup>;
-  /** Adds tabs to the in-memory state. */
   seedTabs: (tabs: FakeTab[]) => void;
+  /** Trigger chrome.tabs.onUpdated for a given tab id with the in-memory tab data. */
+  fireOnUpdated: (
+    tabId: number,
+    changeInfo: chrome.tabs.TabChangeInfo,
+  ) => void;
+  onUpdatedListeners: Set<OnUpdatedListener>;
 }
 
 export function installChromeTabsMock(): ChromeTabsMock {
   const tabs = new Map<number, FakeTab>();
   const groups = new Map<number, FakeGroup>();
   let nextGroupId = 1000;
+  const onUpdatedListeners = new Set<OnUpdatedListener>();
+
+  function fakeTabToChromeTab(t: FakeTab): chrome.tabs.Tab {
+    return {
+      id: t.id,
+      windowId: t.windowId,
+      groupId: t.groupId,
+      title: t.title,
+      url: t.url,
+      incognito: !!t.incognito,
+      pinned: !!t.pinned,
+      index: 0,
+      highlighted: false,
+      active: false,
+      selected: false,
+      discarded: false,
+      autoDiscardable: true,
+    } as chrome.tabs.Tab;
+  }
 
   const tabsApi = {
     group: vi.fn(async (options: chrome.tabs.GroupOptions): Promise<number> => {
@@ -104,25 +136,18 @@ export function installChromeTabsMock(): ChromeTabsMock {
         if (query.groupId !== undefined) {
           list = list.filter((t) => t.groupId === query.groupId);
         }
-        return list.map((t) =>
-          ({
-            id: t.id,
-            windowId: t.windowId,
-            groupId: t.groupId,
-            title: t.title,
-            url: t.url,
-            incognito: !!t.incognito,
-            pinned: !!t.pinned,
-            index: 0,
-            highlighted: false,
-            active: false,
-            selected: false,
-            discarded: false,
-            autoDiscardable: true,
-          }) as chrome.tabs.Tab,
-        );
+        return list.map(fakeTabToChromeTab);
       },
     ),
+
+    onUpdated: {
+      addListener: vi.fn((listener: OnUpdatedListener) => {
+        onUpdatedListeners.add(listener);
+      }),
+      removeListener: vi.fn((listener: OnUpdatedListener) => {
+        onUpdatedListeners.delete(listener);
+      }),
+    },
   };
 
   const tabGroupsApi = {
@@ -162,8 +187,16 @@ export function installChromeTabsMock(): ChromeTabsMock {
   return {
     tabs,
     groups,
+    onUpdatedListeners,
     seedTabs: (toAdd) => {
       for (const t of toAdd) tabs.set(t.id, { ...t });
+    },
+    fireOnUpdated: (tabId, changeInfo) => {
+      const tab = tabs.get(tabId);
+      if (!tab) throw new Error(`fireOnUpdated: unknown tab ${tabId}`);
+      for (const l of onUpdatedListeners) {
+        l(tabId, changeInfo, fakeTabToChromeTab(tab));
+      }
     },
   };
 }
