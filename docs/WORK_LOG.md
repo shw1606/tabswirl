@@ -244,18 +244,36 @@
 
 ---
 
-## 알려진 미해결 / 다음 작업으로 넘긴 사항
+## fa27949 — 2026-05-12 19:44 KST
+**feat(popup,options): full popup UI + BYOK options page (M5+M6+M7)**
 
-- **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
-- **PRD §6.6의 폴더 이름 오기:** `tabpouch/` → `tabswirl/`. 순수 표기 문제.
-- **`pnpm build` 미가용:** 매니페스트가 가리키는 entry point들(`src/popup/index.html`, `src/options/index.html`, `src/background/service-worker.ts`)이 아직 없어 빌드 불가. PRD §14 단계 10~11 진행하며 자연스럽게 해소된다.
+- **PRD §14 단계:** 11·12·13번 / **CLAUDE.md 마일스톤 M5·M6·M7 종료 → MVP 기능 완성**
+- **핵심 변경:**
+  - `src/popup/index.html` + `main.tsx` + `index.css` (Tailwind directives).
+  - `src/popup/tab-tree.ts` — 순수 변환: `(chrome.tabs[], chrome.tabGroups[])` → `TabTree { groups[], ungrouped[] }`. + `allTabIds(tree)` 헬퍼. 단위 테스트 5개.
+  - `src/popup/colors.ts` — `ChromeGroupColor` → Tailwind 유틸 클래스 매핑.
+  - `src/popup/App.tsx` — 2-탭 인터페이스. Stash 탭은 그룹별 섹션(이름 + 컬러 점 + 체크박스 indeterminate), 푸터에 `Stash N tab(s)`. Pouches 탭은 카드 리스트 + Restore / Discard. Restore는 `sendRestorePouch`로 SW에 메시지.
+  - `src/options/` — BYOK 키 (save/clear), autoClassifyEnabled 토글, 언어(en/ko), confirmation 토글들. 셋 다 `getSettings`/`setSettings`/`chrome.storage.local`.
+- **검증:** `pnpm test` 92/92, `pnpm typecheck` 깨끗, **`pnpm build` 성공** — dist/가 unpacked extension으로 로드 가능. 더 이상 미완료 entry point 없음.
+- **Closes:** M5 (popup), M6 (Stash), M7 (Restore + consume). MVP 기능 완성.
 
 ---
 
-## 다음 단계 — PRD §14 9번
+## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
-`src/background/classifier-queue.ts` (incremental classify의 디바운스 + 배치). 요구:
-- 500ms 디바운스 윈도우로 새 탭들을 모은 뒤 한 번에 LLM 호출 (PRD §6.3).
-- 큐 상태를 `chrome.storage.session`에 persist — MV3 SW가 30초 idle 후 죽어도 깨어났을 때 큐 재구성 (CLAUDE.md "Critical invariants" §4).
-- 빠른 경로: `getDomainEntry` hit → LLM 호출 없이 즉시 `addTabsToGroup`.
-- 느린 경로: 캐시 miss → 큐 → 배치 → `classifyIncremental(snapshotWindowGroups, batch)` → `applyGroup` / `setDomainEntry`.
+- **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
+- **PRD §6.6 폴더 이름 오기:** `tabpouch/` → `tabswirl/`. 순수 표기 문제.
+- **PRD §14 단계 14·15·16 마무리:**
+  - 14번(시크릿 / 내부 URL 제외): `isClassifiable`로 처리됨, 별도 작업 불필요.
+  - 15번(restoringTabIds 회피): 이미 `tab-listener` + `restore`로 구현됨.
+  - **16번(자동 분류 OFF 시 평면 리스트 fallback):** 미구현. 현재 popup은 OFF 모드일 때도 그룹 트리 그대로 보여줌(그룹이 없으면 ungrouped만 나옴). PRD §4 F2가 명시한 "OFF 모드 평면 리스트"는 차이가 거의 없지만 명시적 분기 필요.
+- **수동 e2e 검증 안 됨:** dist/를 실제 Chrome에 로드해서 PRD §15의 13개 체크리스트 돌려봐야 함. Vitest 단위 테스트로 보지 못한 회귀가 있을 수 있다 (e.g. CORS 헤더, chrome.tabs.create의 race, 매니페스트 권한 누락 등).
+
+---
+
+## 다음 단계
+
+1. **수동 e2e 테스트** (PRD §15 시나리오 1–12). dist/를 `chrome://extensions` → Load unpacked.
+2. PRD §14 #16 평면 리스트 fallback (자동 분류 OFF 모드에서 popup이 명시적으로 다르게 동작하도록).
+3. 마이너 정리: CLAUDE.md / PRD 경로 일관성.
+4. Phase 2 (PRD §10): 부분 복원, Pouch 라벨 편집, 다중 LLM provider 등.
