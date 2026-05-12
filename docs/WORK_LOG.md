@@ -1,38 +1,25 @@
 # TabSwirl — Work Log
 
-커밋 단위로 어떤 작업이 실제로 이뤄졌는지 기록한다. PRD §14 부트스트랩 순서를 참조점으로 사용한다.
+커밋 단위로 실제로 진행한 작업을 기록한다. PRD §14 부트스트랩 순서를 참조점으로 사용한다.
 
 기록 규칙:
-- 새 커밋이 생기면 맨 위에 추가한다 (역시간순).
+- **시간 정순 (오래된 커밋 → 최근 커밋)**. 항상 파일 맨 아래에 새 항목을 추가한다.
 - 항목당: 커밋 해시, 날짜, 한 줄 요약, PRD §14 단계 매핑, 핵심 변경, 결정·트레이드오프(있을 때만), 테스트·검증 결과.
+- 커밋을 만들면 곧바로 이 파일에 한 항목을 추가하고 같은(또는 다음) 커밋에 포함시킨다 — 작업 직후 한 번에 처리.
 
 ---
 
-## c7dc4e2 — 2026-05-12 09:53 KST
-**feat(core): pouch-store CRUD with Vitest (M1)**
+## 46accee — 2026-05-12 09:48 KST
+**chore: initial commit (PRD, CLAUDE.md, llm prompts)**
 
-- **PRD §14 단계:** 4번 완료 → CLAUDE.md 마일스톤 M1 종료
+- **PRD §14 단계:** 0번 (베이스라인)
 - **핵심 변경:**
-  - `src/core/pouch-store.ts` — `createPouch` / `getPouch` / `listPouches` / `removePouch`. 저장소 레이아웃은 PRD §6.4 그대로 `pouch:<id>` + `pouches:index` (newest first).
-  - `tests/core/pouch-store.test.ts` — 9개 케이스 (round-trip, 순서, totalTabs 합산, optional 필드, 없는 id, 멱등 삭제, 깨진 index 자가 복구, 빈 상태).
-  - `tests/helpers/chrome-storage.ts` — Vitest용 in-memory `chrome.storage.local` 목.
-- **결정:**
-  - `removePouch`는 consume-on-restore의 원시 동작. **멱등**으로 설계해 같은 id에 두 번 호출돼도 안전.
-  - `listPouches`는 index에 있는데 실제 pouch가 사라진 항목을 만나면 index를 즉시 보정한다 (자가 복구). 데이터 손실 시나리오에서 UI가 멈추지 않게.
-  - id 생성은 `crypto.randomUUID()` — MV3 서비스 워커·Node 19+ 모두 지원.
-- **검증:** `pnpm test` 9/9 통과, `pnpm typecheck` 깨끗.
-
----
-
-## 3ba09eb — 2026-05-12 09:52 KST
-**feat(core): add types module (PRD §7 data model)**
-
-- **PRD §14 단계:** 3번
-- **핵심 변경:** `src/core/types.ts` — `ChromeGroupColor`, `SavedTab`, `SavedGroup`, `UngroupedBucket`, `Pouch`, `Settings`, `DomainCacheEntry`.
-- **결정:**
-  - 모든 타입을 structured-cloneable한 평면 객체로만 정의 (no `Map` / `Set` / `Date`). CLAUDE.md "Common traps" §5 준수 — chrome.storage가 직렬화 못 하는 자료형은 처음부터 못 들어가게.
-  - `ChromeGroupColor`는 9개 enum로 고정. LLM 응답 검증·`chrome.tabGroups.update` 양쪽 단일 진실.
-- **검증:** 이 커밋으로 `src/llm/prompts.ts`의 `import type { ChromeGroupColor } from "../core/types"` 미해결 import가 사라짐 → typecheck 통과.
+  - `CLAUDE.md` — 운영 가이드 (사용자가 사전 작성).
+  - `docs/TabSwirl-PRD.md` — 제품 PRD v0.3 (사용자가 사전 작성).
+  - `src/llm/prompts.ts` — LLM 시스템 프롬프트 + Anthropic tool use 스키마 (사용자가 사전 작성).
+  - `.gitignore` — node_modules, dist, .env 등.
+- **결정:** git 저장소가 없던 상태였기에 `git init -b main`으로 시작. 사용자가 직접 쓴 파일들을 분리된 베이스라인 커밋으로 박제 → 이후 모든 변경은 AI 작업.
+- **검증:** 해당 없음 (베이스라인).
 
 ---
 
@@ -55,17 +42,41 @@
 
 ---
 
-## 46accee — 2026-05-12 09:48 KST
-**chore: initial commit (PRD, CLAUDE.md, llm prompts)**
+## 3ba09eb — 2026-05-12 09:52 KST
+**feat(core): add types module (PRD §7 data model)**
 
-- **PRD §14 단계:** 0번 (베이스라인)
+- **PRD §14 단계:** 3번
+- **핵심 변경:** `src/core/types.ts` — `ChromeGroupColor`, `SavedTab`, `SavedGroup`, `UngroupedBucket`, `Pouch`, `Settings`, `DomainCacheEntry`.
+- **결정:**
+  - 모든 타입을 structured-cloneable한 평면 객체로만 정의 (no `Map` / `Set` / `Date`). CLAUDE.md "Common traps" §5 준수 — chrome.storage가 직렬화 못 하는 자료형은 처음부터 못 들어가게.
+  - `ChromeGroupColor`는 9개 enum로 고정. LLM 응답 검증·`chrome.tabGroups.update` 양쪽 단일 진실.
+- **검증:** 이 커밋으로 `src/llm/prompts.ts`의 `import type { ChromeGroupColor } from "../core/types"` 미해결 import가 사라짐 → typecheck 통과.
+
+---
+
+## c7dc4e2 — 2026-05-12 09:53 KST
+**feat(core): pouch-store CRUD with Vitest (M1)**
+
+- **PRD §14 단계:** 4번 완료 → CLAUDE.md 마일스톤 M1 종료
 - **핵심 변경:**
-  - `CLAUDE.md` — 운영 가이드 (사용자가 사전 작성).
-  - `docs/TabSwirl-PRD.md` — 제품 PRD v0.3 (사용자가 사전 작성).
-  - `src/llm/prompts.ts` — LLM 시스템 프롬프트 + Anthropic tool use 스키마 (사용자가 사전 작성).
-  - `.gitignore` — node_modules, dist, .env 등.
-- **결정:** git 저장소가 없던 상태였기에 `git init -b main`으로 시작. 사용자가 직접 쓴 파일들을 분리된 베이스라인 커밋으로 박제 → 이후 모든 변경은 AI 작업.
-- **검증:** 해당 없음 (베이스라인).
+  - `src/core/pouch-store.ts` — `createPouch` / `getPouch` / `listPouches` / `removePouch`. 저장소 레이아웃은 PRD §6.4 그대로 `pouch:<id>` + `pouches:index` (newest first).
+  - `tests/core/pouch-store.test.ts` — 9개 케이스 (round-trip, 순서, totalTabs 합산, optional 필드, 없는 id, 멱등 삭제, 깨진 index 자가 복구, 빈 상태).
+  - `tests/helpers/chrome-storage.ts` — Vitest용 in-memory `chrome.storage.local` 목.
+- **결정:**
+  - `removePouch`는 consume-on-restore의 원시 동작. **멱등**으로 설계해 같은 id에 두 번 호출돼도 안전.
+  - `listPouches`는 index에 있는데 실제 pouch가 사라진 항목을 만나면 index를 즉시 보정한다 (자가 복구). 데이터 손실 시나리오에서 UI가 멈추지 않게.
+  - id 생성은 `crypto.randomUUID()` — MV3 서비스 워커·Node 19+ 모두 지원.
+- **검증:** `pnpm test` 9/9 통과, `pnpm typecheck` 깨끗.
+
+---
+
+## 31fd580 — 2026-05-12 (작업 진행 중)
+**docs: add WORK_LOG.md with retrospective entries for commits so far**
+
+- **PRD §14 단계:** 해당 없음 (메타 문서)
+- **핵심 변경:** `docs/WORK_LOG.md` 신설. 이 시점까지의 4개 커밋을 회고적으로 기록.
+- **결정:** 초기 버전은 역시간순으로 작성했으나 사용자 피드백을 받아 다음 커밋에서 정순으로 재정렬.
+- **검증:** 해당 없음.
 
 ---
 
