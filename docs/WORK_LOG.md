@@ -273,6 +273,23 @@
 
 ---
 
+## 4bd1f96 — 2026-05-12 22:21 KST
+**feat(background): window-type predicate + defensive group-manager**
+
+- **상황:** 수동 e2e에서 `Uncaught (in promise) Error: Grouping is not supported by tabs in this window.` 발생. 원인은 사용자의 Gemini PWA(window type `"app"`)가 열려있어 `chrome.tabs.group`이 throw. 한 윈도우의 실패가 전체 분류 흐름을 죽임.
+- **PRD §14 단계:** 해당 없음 (안정성 패치, 4·5번 보강).
+- **핵심 변경:**
+  - `src/background/window-type.ts` 신설. `getWindowType(windowId)` (`chrome.windows.get` 캐시), `isGroupableWindow(windowId)` (단일 진실), `registerWindowTypeListeners()` (`chrome.windows.onRemoved`로 캐시 invalidate, idempotent), `_resetForTests()`.
+  - `src/background/group-manager.ts` — `applyGroup`이 `chrome.tabs.group` throw를 잡아 `null` 반환 + `console.warn`. 기존 호출자는 이미 null을 skip으로 처리. `chrome.tabGroups.update` 실패는 그룹 자체는 살아있으니 그룹 id는 그대로 반환. `addTabsToGroup`도 try/catch + warn.
+  - 테스트 헬퍼에 `chrome.windows.{get, getAll, getLastFocused, onRemoved}` 모킹 추가. `seedTabs`는 자동으로 unique windowId마다 `"normal"` 윈도우 생성. `seedWindow(id, type)`로 타입 override.
+  - 신규 테스트 8개 (window-type 6 + group-manager 2).
+- **결정:**
+  - `chrome.windows.windowTypeEnum` 타입 사용 (camelCase, `@types/chrome`의 비표준 명명).
+  - 캐시는 SW idle 시 사라지지만 단지 최적화. 정확성에 영향 없음.
+- **검증:** 100/100 통과, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
