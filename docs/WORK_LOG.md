@@ -290,6 +290,24 @@
 
 ---
 
+## 5965e46 — 2026-05-12 22:24 KST
+**feat(background): per-window isolation for all classify paths**
+
+- **상황:** 직전 커밋(4bd1f96)의 `window-type` + 방어적 group-manager 1차 보강. 이제 4개 진입점에 통합.
+- **PRD §14 단계:** 8·9·10번 보강, 13번 안정성.
+- **핵심 변경:**
+  - `src/background/initial-classifier.ts` — `chrome.tabs.query({})` → `chrome.windows.getAll({populate: true})`. 각 윈도우의 `type === "normal"` 필터. 각 윈도우 `classifyOneWindow`는 try/catch로 감싸 한 윈도우의 크래시가 다른 윈도우 처리에 전파되지 않음.
+  - `src/background/tab-listener.ts` — `handleTabUpdate`에 `isGroupableWindow(tab.windowId)` 게이트. PWA / app / popup 탭은 큐에 진입 자체를 못 함.
+  - `src/background/classifier-queue.ts` — `flushWindow`: 큐 소진(멱등성 보장)은 먼저, 그 다음 non-groupable이면 LLM 호출 전에 bail.
+  - `src/background/restore.ts` — `resolveTargetWindow`가 last-focused가 normal이면 그걸 쓰고, 아니면 다른 normal 윈도우를 찾음. normal이 하나도 없으면 tagged error 반환(pouch는 소비하지 않음 — 탭을 만들기 전에 실패하므로).
+  - `src/background/service-worker.ts` — `registerWindowTypeListeners()` 호출 추가.
+  - `tests/background/restore.test.ts` — 헬퍼 통합(`installChromeWindowsMock` 제거하고 `seedWindow` / `setFocusedWindow` 사용). PWA-focused 시 다른 normal 윈도우로 fallback 케이스 + normal 윈도우 0개 시 에러 케이스 추가.
+  - 신규 테스트 5개 (initial-classifier 2 + tab-listener 1 + restore 2).
+- **검증:** 105/105 통과, typecheck·build 깨끗.
+- **Fixes:** `Uncaught (in promise) Error: Grouping is not supported by tabs in this window.` — Gemini PWA가 열려있을 때 발생하던 자동 분류 차단.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
