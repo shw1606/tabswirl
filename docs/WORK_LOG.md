@@ -232,6 +232,18 @@
 
 ---
 
+## 71dc32e — 2026-05-12 19:42 KST
+**feat(background): SW dispatches restore-pouch messages**
+
+- **PRD §14 단계:** 13번 (Restore 메시징 끝점)
+- **핵심 변경:**
+  - `src/background/service-worker.ts` — `chrome.runtime.onMessage` 리스너 추가. `RestoreRequest`만 처리(다른 메시지는 false 반환해 다음 리스너로 패스). `restorePouch` 결과를 `RestoreResponse`로 변환해 `sendResponse`.
+  - 리스너에서 `return true` — async sendResponse를 위해 채널 유지 (chrome docs 필수).
+- **결정:** SW의 모든 메시지 디스패치는 이 한 곳에서. 새 메시지 타입이 생기면 같은 리스너에 분기 추가.
+- **검증:** 87/87, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
