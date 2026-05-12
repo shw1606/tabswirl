@@ -55,6 +55,53 @@ describe("classifier-queue — fast path", () => {
     vi.useRealTimers();
   });
 
+  it("falls back to slow path when the cached group has been deleted (stale cache)", async () => {
+    env.tabs.seedTabs([
+      { id: 99, windowId: 10, groupId: -1, title: "Insta", url: "https://instagram.com/" },
+    ]);
+    // Seed a cache pointing at a group that never existed.
+    await seedDomainEntries(10, [
+      {
+        domain: "instagram.com",
+        groupId: 1459190572,
+        categoryName: "Social",
+        color: "pink",
+      },
+    ]);
+    // No api key, so slow-path LLM call will silently fail — but we
+    // can still observe the cache invalidation and queue write.
+    vi.useFakeTimers();
+    try {
+      const result = await enqueueTab({
+        tabId: 99,
+        windowId: 10,
+        title: "Insta",
+        url: "https://instagram.com/",
+        language: "en",
+        provider: "anthropic",
+      });
+
+      // Returned the slow-path tag rather than the cache-hit tag.
+      expect(result.path).toBe("queued");
+
+      // Cache entry for instagram.com was evicted.
+      const cache = (
+        await env.storage.session.get("cache:domains:10")
+      )["cache:domains:10"] as Record<string, unknown> | undefined;
+      expect(cache?.["instagram.com"]).toBeUndefined();
+
+      // Tab was enqueued for the slow path.
+      const queue = (
+        await env.storage.session.get("queue:incremental:10")
+      )["queue:incremental:10"] as { tabs: { id: number }[] } | undefined;
+      expect(queue?.tabs).toEqual([
+        { id: 99, title: "Insta", domain: "instagram.com" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("joins an existing group immediately on cache hit — no LLM call", async () => {
     env.tabs.seedTabs([
       { id: 1, windowId: 10, groupId: 500, title: "PG1", url: "https://postgresql.org/a" },

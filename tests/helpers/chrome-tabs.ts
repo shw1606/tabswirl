@@ -42,6 +42,8 @@ type OnUpdatedListener = (
 
 type OnWindowRemovedListener = (windowId: number) => void;
 
+type OnTabGroupRemovedListener = (group: FakeGroup) => void;
+
 export interface ChromeTabsMock {
   tabs: Map<number, FakeTab>;
   groups: Map<number, FakeGroup>;
@@ -53,6 +55,8 @@ export interface ChromeTabsMock {
   setFocusedWindow: (id: number) => void;
   /** Trigger chrome.windows.onRemoved for cache invalidation tests. */
   fireWindowRemoved: (id: number) => void;
+  /** Trigger chrome.tabGroups.onRemoved for cache invalidation tests. */
+  fireTabGroupRemoved: (groupId: number) => void;
   /** Trigger chrome.tabs.onUpdated for a given tab id with the in-memory tab data. */
   fireOnUpdated: (
     tabId: number,
@@ -70,6 +74,7 @@ export function installChromeTabsMock(): ChromeTabsMock {
   let focusedWindowId: number | null = null;
   const onUpdatedListeners = new Set<OnUpdatedListener>();
   const onWindowRemovedListeners = new Set<OnWindowRemovedListener>();
+  const onTabGroupRemovedListeners = new Set<OnTabGroupRemovedListener>();
 
   function ensureWindow(id: number, type: chrome.windows.windowTypeEnum = "normal"): void {
     if (!windows.has(id)) windows.set(id, { id, type });
@@ -217,6 +222,14 @@ export function installChromeTabsMock(): ChromeTabsMock {
         return list;
       },
     ),
+    onRemoved: {
+      addListener: vi.fn((listener: OnTabGroupRemovedListener) => {
+        onTabGroupRemovedListeners.add(listener);
+      }),
+      removeListener: vi.fn((listener: OnTabGroupRemovedListener) => {
+        onTabGroupRemovedListeners.delete(listener);
+      }),
+    },
   };
 
   const windowsApi = {
@@ -296,6 +309,12 @@ export function installChromeTabsMock(): ChromeTabsMock {
     fireWindowRemoved: (id) => {
       windows.delete(id);
       for (const l of onWindowRemovedListeners) l(id);
+    },
+    fireTabGroupRemoved: (groupId) => {
+      const g = groups.get(groupId);
+      if (!g) throw new Error(`fireTabGroupRemoved: unknown group ${groupId}`);
+      groups.delete(groupId);
+      for (const l of onTabGroupRemovedListeners) l(g);
     },
     fireOnUpdated: (tabId, changeInfo) => {
       const tab = tabs.get(tabId);

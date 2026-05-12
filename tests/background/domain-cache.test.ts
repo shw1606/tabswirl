@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  _resetGroupRemovalListenerForTests,
   clearWindow,
   forgetGroup,
   getDomainEntry,
   listDomainEntries,
+  registerGroupRemovalInvalidator,
   seedDomainEntries,
   setDomainEntry,
 } from "../../src/background/domain-cache";
 import { installChromeSessionStorageMock } from "../helpers/chrome-storage";
+import { installChromeTabsMock } from "../helpers/chrome-tabs";
 
 describe("domain-cache", () => {
   beforeEach(() => {
     installChromeSessionStorageMock();
+    _resetGroupRemovalListenerForTests();
   });
 
   afterEach(() => {
@@ -131,6 +135,62 @@ describe("domain-cache", () => {
     expect(await getDomainEntry(1, "postgresql.org")).toBeNull();
     expect(await getDomainEntry(1, "redis.io")).toBeNull();
     expect((await getDomainEntry(1, "github.com"))?.groupId).toBe(2);
+  });
+
+  it("registerGroupRemovalInvalidator drops entries when chrome.tabGroups.onRemoved fires", async () => {
+    // installChromeTabsMock provides chrome.tabGroups, including
+    // onRemoved. It also resets the storage mock, so re-seed here.
+    const tabsEnv = installChromeTabsMock();
+    await seedDomainEntries(10, [
+      {
+        domain: "instagram.com",
+        groupId: 1459190572,
+        categoryName: "Social",
+        color: "pink",
+      },
+      {
+        domain: "twitter.com",
+        groupId: 1459190572,
+        categoryName: "Social",
+        color: "pink",
+      },
+      {
+        domain: "github.com",
+        groupId: 2222,
+        categoryName: "Code",
+        color: "purple",
+      },
+    ]);
+    // The listener needs a fake group object — seed it then fire removal.
+    tabsEnv.groups.set(1459190572, {
+      id: 1459190572,
+      windowId: 10,
+      title: "Social",
+      color: "pink",
+    });
+
+    registerGroupRemovalInvalidator();
+    tabsEnv.fireTabGroupRemoved(1459190572);
+
+    // Give the void Promise inside the listener a tick to flush.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(await getDomainEntry(10, "instagram.com")).toBeNull();
+    expect(await getDomainEntry(10, "twitter.com")).toBeNull();
+    // Other group's entries left untouched.
+    expect((await getDomainEntry(10, "github.com"))?.groupId).toBe(2222);
+  });
+
+  it("registerGroupRemovalInvalidator is idempotent", () => {
+    installChromeTabsMock();
+    registerGroupRemovalInvalidator();
+    registerGroupRemovalInvalidator();
+    expect(
+      (chrome.tabGroups.onRemoved.addListener as unknown as {
+        mock: { calls: unknown[] };
+      }).mock.calls,
+    ).toHaveLength(1);
   });
 
   it("setDomainEntry overwrites an existing entry", async () => {

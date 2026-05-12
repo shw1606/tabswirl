@@ -122,3 +122,35 @@ export async function forgetGroup(
     await writeWindow(windowId, cache);
   }
 }
+
+// ============================================================
+// Proactive invalidation on group deletion
+// ============================================================
+
+// When the user closes the last tab of a group, Chrome auto-removes the
+// group. The cached domain → groupId entry then points at nothing and
+// the next same-domain tab open would hit the fast path and fail with
+// "No group with id: X". chrome.tabs.group catches that defensively
+// (group-manager.ts) and the classifier queue falls back to the slow
+// path, but it's cleaner to evict the dead entry the moment the group
+// dies so the next tab is a clean cache miss instead of a stale hit.
+//
+// Ref: https://developer.chrome.com/docs/extensions/reference/api/tabGroups#event-onRemoved
+
+let groupRemovalListenerRegistered = false;
+
+export function registerGroupRemovalInvalidator(): void {
+  if (groupRemovalListenerRegistered) return;
+  groupRemovalListenerRegistered = true;
+  chrome.tabGroups.onRemoved.addListener((group) => {
+    if (typeof group.windowId !== "number" || typeof group.id !== "number") {
+      return;
+    }
+    void forgetGroup(group.windowId, group.id);
+  });
+}
+
+/** Test-only. */
+export function _resetGroupRemovalListenerForTests(): void {
+  groupRemovalListenerRegistered = false;
+}

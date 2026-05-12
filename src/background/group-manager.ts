@@ -85,20 +85,26 @@ export async function applyGroup(input: ApplyGroupInput): Promise<number | null>
  * title/color alone. Used by the fast path in the classifier queue
  * when a domain cache hit tells us exactly which group to extend.
  *
- * Throw-safe with the same rationale as applyGroup.
+ * Returns `true` on success, `false` when chrome.tabs.group rejected —
+ * most commonly because the cached groupId no longer exists (the user
+ * closed every tab in the group, Chrome auto-removed it, and our
+ * domain cache still points at the dead id). The caller is expected
+ * to invalidate its cache entry and re-classify.
  */
 export async function addTabsToGroup(
   groupId: number,
   tabIds: number[],
-): Promise<void> {
-  if (tabIds.length === 0) return;
+): Promise<boolean> {
+  if (tabIds.length === 0) return true;
   try {
     await chrome.tabs.group({ tabIds, groupId });
+    return true;
   } catch (err) {
     console.warn(
       `[tabswirl] addTabsToGroup failed for group ${groupId}:`,
       err instanceof Error ? err.message : err,
     );
+    return false;
   }
 }
 

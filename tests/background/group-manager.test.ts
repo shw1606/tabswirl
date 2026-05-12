@@ -86,8 +86,8 @@ describe("group-manager", () => {
     expect(mock.tabs.get(3)?.groupId).toBe(groupId);
   });
 
-  it("addTabsToGroup is a no-op for empty list", async () => {
-    await expect(addTabsToGroup(1, [])).resolves.toBeUndefined();
+  it("addTabsToGroup is a no-op for empty list and returns true", async () => {
+    await expect(addTabsToGroup(1, [])).resolves.toBe(true);
   });
 
   it("ungroupTabs detaches tabs from their group", async () => {
@@ -154,15 +154,30 @@ describe("group-manager", () => {
     expect(mock.tabs.get(50)?.groupId).toBe(-1);
   });
 
-  it("addTabsToGroup logs and swallows when chrome.tabs.group throws", async () => {
+  it("addTabsToGroup returns true on success", async () => {
+    const groupId = await applyGroup({
+      windowId: 10,
+      tabIds: [1],
+      name: "G",
+      color: "blue",
+    });
+    const ok = await addTabsToGroup(groupId!, [2]);
+    expect(ok).toBe(true);
+  });
+
+  it("addTabsToGroup returns true on empty input (no-op)", async () => {
+    expect(await addTabsToGroup(1, [])).toBe(true);
+  });
+
+  it("addTabsToGroup returns false when chrome.tabs.group throws", async () => {
     const chromeAny = (globalThis as unknown as {
       chrome: { tabs: { group: unknown } };
     }).chrome;
     chromeAny.tabs.group = vi.fn(async () => {
-      throw new Error("Grouping is not supported by tabs in this window.");
+      throw new Error("No group with id: 1000");
     });
 
-    await expect(addTabsToGroup(1000, [1])).resolves.toBeUndefined();
+    expect(await addTabsToGroup(1000, [1])).toBe(false);
   });
 
   it("snapshotWindowGroups respects sampleTabCount cap", async () => {

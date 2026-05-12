@@ -18,6 +18,7 @@ import type { ChromeGroupColor } from "../core/types";
 import type { ExistingGroup, Language, TabInput } from "../llm/prompts";
 import { classifyIncremental, type LlmProviderName } from "../llm/provider";
 import {
+  forgetGroup,
   getDomainEntry,
   seedDomainEntries,
   setDomainEntry,
@@ -112,19 +113,30 @@ export async function enqueueTab(
 ): Promise<{ path: EnqueuePath }> {
   const domain = extractDomain(input.url);
 
-  // FAST PATH — domain cache hit. Just join the existing group, refresh
-  // the entry's lastUsed, and we're done.
+  // FAST PATH — domain cache hit. Try to join the cached group; if it
+  // succeeds, refresh lastUsed and we're done.
+  //
+  // If chrome.tabs.group rejects (most often because the group was
+  // auto-deleted when the user closed its last tab), invalidate the
+  // stale cache entry and fall through to the slow path so the LLM
+  // gets to assign this tab to a fresh group.
   const cached = await getDomainEntry(input.windowId, domain);
   if (cached) {
-    await addTabsToGroup(cached.groupId, [input.tabId]);
-    await setDomainEntry({
-      windowId: input.windowId,
-      domain,
-      groupId: cached.groupId,
-      categoryName: cached.categoryName,
-      color: cached.color,
-    });
-    return { path: "cache-hit" };
+    const joined = await addTabsToGroup(cached.groupId, [input.tabId]);
+    if (joined) {
+      await setDomainEntry({
+        windowId: input.windowId,
+        domain,
+        groupId: cached.groupId,
+        categoryName: cached.categoryName,
+        color: cached.color,
+      });
+      return { path: "cache-hit" };
+    }
+    console.debug(
+      `[tabswirl] stale cache for "${domain}" pointed at dead group ${cached.groupId}; invalidating and re-classifying`,
+    );
+    await forgetGroup(input.windowId, cached.groupId);
   }
 
   // SLOW PATH — enqueue and (re)schedule the debounced flush.
