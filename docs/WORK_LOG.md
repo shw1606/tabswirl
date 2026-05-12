@@ -359,6 +359,24 @@
 
 ---
 
+## 0aec088 — 2026-05-12 23:34 KST
+**fix(classifier): invalidate cache when the cached group is gone**
+
+- **상황 (사용자 보고):** Gemini로 한 번 전체 분류 → 사용자가 그룹의 모든 탭을 닫음 → Chrome이 빈 그룹 자동 삭제 → 인스타 다시 열기 → `[tabswirl] addTabsToGroup failed for group 1459190572: No group with id: 1459190572.` warn 발생. 크래시는 아니지만 (방어적 try/catch 덕분) 캐시가 dead groupId를 가리키고 있어 같은 도메인의 다음 탭도 똑같이 실패. 사용자 시점에선 "분류가 안 됨".
+- **PRD §14 단계:** 해당 없음 (안정성 패치).
+- **핵심 변경 (defense in depth, 두 층):**
+  - **Proactive — `src/background/domain-cache.ts`:** `registerGroupRemovalInvalidator()` 신설. `chrome.tabGroups.onRemoved` 리스너로 `forgetGroup(windowId, groupId)` 즉시 호출. 그룹 사라지는 순간 캐시 일관성 회복. service-worker.ts entry에서 등록 (idempotent).
+  - **Reactive — `src/background/group-manager.ts` + `classifier-queue.ts`:**
+    - `addTabsToGroup` 반환 타입을 `Promise<void>` → `Promise<boolean>`. 성공 true, throw 시 false.
+    - `enqueueTab` 빠른 경로: `addTabsToGroup` 결과 체크 → false면 `forgetGroup` + 슬로우 패스 fall through.
+  - 테스트 헬퍼에 `chrome.tabGroups.onRemoved` + `fireTabGroupRemoved(groupId)` 추가.
+  - 신규 테스트 6 (group-manager 2개 갱신·1개 신규 + classifier-queue 1 stale-cache fallback + domain-cache 2 proactive invalidation·idempotency).
+- **결정:** 두 층이 redundant하지만 의도적. SW idle 중에 `chrome.tabGroups.onRemoved` 이벤트가 발화하면 SW는 깨어나지만 등록된 리스너가 다시 셋업되기 전 race 가능성이 작게나마 존재. reactive 폴백이 그 경우 안전망 역할. 비용은 boolean 반환 1줄 수정.
+- **검증:** 126/126 통과, typecheck·build 깨끗.
+- **남은 후속 의문:** 다른 cache invalidation 트리거가 있는지 — 예) 사용자가 그룹명을 수동으로 바꿈, 컬러 바꿈, 다른 윈도우로 이동. PRD §4 F1 "사용자 액션 존중" 일부. Phase 2.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
