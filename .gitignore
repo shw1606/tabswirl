@@ -6,3 +6,7 @@ dist
 .env.local
 .vite
 coverage
+
+# Stray AI-generated images that occasionally land in the project root.
+Gemini_Generated_*
+ChatGPT_Image_*
