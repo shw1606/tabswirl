@@ -175,6 +175,28 @@
 
 ---
 
+## 8861b6d — 2026-05-12 19:36 KST
+**feat(background): classifier-queue — debounce + batch + SW persistence (M3)**
+
+- **PRD §14 단계:** 9번 / **CLAUDE.md 마일스톤 M3 종료**
+- **핵심 변경:**
+  - `src/background/classifier-queue.ts` — incremental classify의 진입점. `enqueueTab(input)` 단일 함수.
+    - 빠른 경로: `getDomainEntry` hit → `addTabsToGroup` + `setDomainEntry` 즉시. LLM 호출 없음.
+    - 느린 경로: 큐(`chrome.storage.session`에 `queue:incremental:<windowId>` 키로 persist) + 500ms 디바운스 setTimeout. 새 탭이 도착하면 큐에 append, 타이머 reset(`scheduledAt = now + DEBOUNCE_MS`).
+    - flush: `snapshotWindowGroups` → `classifyIncremental(existingGroups, newTabs)` → 응답을 group_name별 버킷화 → 기존 그룹 재사용 또는 신규 생성 → `seedDomainEntries`.
+    - 큐는 flush 시 단 한 번 소진. 실패해도 재시도 없음 — 조용히 ungrouped. PRD §6.3 mandate.
+  - `rehydrateQueue(options)` — SW 깨어날 때 호출. 과거 `scheduledAt`이면 즉시 flush, 미래면 잔여 시간만큼 재스케줄.
+  - `_resetInMemoryTimers()` — 테스트 affordance.
+  - `tests/background/classifier-queue.test.ts` — 9 케이스.
+- **결정·발견:**
+  - **`chrome.alarms` 부적합:** 최소 30~60초 단위로 500ms 디바운스에 못 쓴다 (CLAUDE.md §4 indication 재확인). setTimeout + storage persistence의 조합이 정답.
+  - **per-window queue:** 그룹 컨텍스트는 윈도우 단위이므로 큐도 윈도우 단위. 다른 윈도우의 디바운스에 영향 안 줌.
+  - **race window 의식적 무시:** 두 enqueueTab이 거의 동시에 같은 윈도우에 들어와 동시에 readQueue하면 한쪽이 누락될 가능성. 결과는 "한 탭만 ungrouped" — fallback 동작과 동일하므로 락 추가 안 함.
+  - `vi.useFakeTimers()` + `vi.advanceTimersByTimeAsync` 패턴으로 디바운스 동작 검증.
+- **검증:** 66/66 통과, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 다음 세션에서 둘 중 하나로 정리 필요.
