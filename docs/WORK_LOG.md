@@ -456,7 +456,7 @@
 
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
-- **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
+- ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
 - **PRD §6.6 폴더 이름 오기:** `tabpouch/` → `tabswirl/`. 순수 표기 문제.
 - **PRD §14 단계 14·15·16 마무리:**
   - 14번(시크릿 / 내부 URL 제외): `isClassifiable`로 처리됨, 별도 작업 불필요.
