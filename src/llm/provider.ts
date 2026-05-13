@@ -14,6 +14,7 @@
 // PRD §6.6 lists this file as the canonical place for the interface.
 
 import { anthropicProvider } from "./anthropic";
+import { chromeAiProvider } from "./chrome-ai";
 import { geminiProvider } from "./gemini";
 import type {
   ClassificationAssignment,
@@ -26,7 +27,7 @@ import type {
  * Tag for one of the configured LLM backends. Expand this union when a
  * new provider is registered in getProvider().
  */
-export type LlmProviderName = "anthropic" | "gemini";
+export type LlmProviderName = "anthropic" | "gemini" | "chrome-ai";
 
 export type ClassifyError =
   | { kind: "missing-key" }
@@ -78,6 +79,8 @@ export function getProvider(name: LlmProviderName): LlmProvider | null {
       return anthropicProvider;
     case "gemini":
       return geminiProvider;
+    case "chrome-ai":
+      return chromeAiProvider;
     default:
       return null;
   }
