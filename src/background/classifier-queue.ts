@@ -1,8 +1,14 @@
-// Incremental classification with a 500ms debounce window + per-window
-// batching. Two paths per PRD §6.3:
+// Incremental classification with three tiers of speed (PRD §6.3 + the
+// rules cascade added on top):
 //
-//   FAST  cache hit: domain → known groupId. Just join the group. No LLM.
-//   SLOW  cache miss: queue the tab, wait 500ms for siblings, batch to LLM.
+//   T0  Domain-cache hit: groupId already known for this domain. Just
+//       join the group. ~10ms. No LLM, no rules.
+//   T1  Domain-rules hit: well-known site like youtube.com / github.com
+//       matches src/core/domain-rules.ts. Apply that category +
+//       seed the cache so future tabs from the same domain take T0.
+//       ~30ms. No LLM.
+//   T2  Slow path: cache & rules miss → queue + 500ms debounce → batch
+//       LLM call. Existing behaviour.
 //
 // MV3 service-worker lifecycle (CLAUDE.md "Critical invariants" §4):
 // the SW idles after ~30s. A bare setTimeout dies with it. We persist
@@ -13,6 +19,7 @@
 // chrome.alarms is unsuitable here — its minimum period is way bigger
 // than our 500ms debounce. setTimeout + persistence is the right model.
 
+import { matchDomainRule } from "../core/domain-rules";
 import { extractDomain } from "../core/tabs";
 import type { ChromeGroupColor } from "../core/types";
 import type { ExistingGroup, Language, TabInput } from "../llm/prompts";
@@ -61,7 +68,7 @@ export interface EnqueueInput {
   provider?: LlmProviderName;
 }
 
-export type EnqueuePath = "cache-hit" | "queued";
+export type EnqueuePath = "cache-hit" | "rule-hit" | "queued";
 
 // In-memory timer registry. The Map dies when the SW idles — that's
 // expected. rehydrateQueue() restores timers on wake.
@@ -145,7 +152,37 @@ export async function enqueueTab(
     await forgetGroup(input.windowId, cached.groupId);
   }
 
-  // SLOW PATH — enqueue and (re)schedule the debounced flush.
+  // TIER 1 — domain-rules hit. Well-known site like youtube.com. Apply
+  // the rule's category immediately and seed the cache so future tabs
+  // from this domain go through the T0 fast path. Skips the LLM entirely.
+  const rule = matchDomainRule(domain, input.language);
+  if (rule) {
+    const groupId = await applyGroup({
+      windowId: input.windowId,
+      tabIds: [input.tabId],
+      name: rule.categoryName,
+      color: rule.color,
+    });
+    if (groupId !== null) {
+      await setDomainEntry({
+        windowId: input.windowId,
+        domain,
+        groupId,
+        categoryName: rule.categoryName,
+        color: rule.color,
+      });
+      console.log(
+        `[tabswirl:timing] rule-hit tab=${input.tabId} ${domain} → ${rule.categoryName} (${Math.round(
+          performance.now() - tEnter,
+        )}ms)`,
+      );
+      return { path: "rule-hit" };
+    }
+    // applyGroup returned null — non-normal window or chrome rejected.
+    // Fall through to slow path so we still attempt classification.
+  }
+
+  // TIER 2 (slow path) — enqueue and (re)schedule the debounced flush.
   const queue = await readQueue(input.windowId);
   if (!queue.tabs.some((t) => t.id === input.tabId)) {
     queue.tabs.push({ id: input.tabId, title: input.title, domain });
