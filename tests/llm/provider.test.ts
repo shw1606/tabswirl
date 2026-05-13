@@ -112,36 +112,13 @@ describe("provider facade", () => {
     expect(net.requests[0]?.url).toContain("generativelanguage.googleapis.com");
   });
 
-  it('classifyInitial defaults to Gemini when provider omitted', async () => {
-    await storage.local.set({ "byok:gemini": "AIza-test" });
+  it("classifyInitial defaults to Anthropic when provider omitted", async () => {
+    // chrome-ai cascade fires first but LanguageModel is absent in tests,
+    // so it bounces immediately to the BYOK fallback (Anthropic by default).
+    await storage.local.set({ "byok:anthropic": "sk-test" });
     net.queueResponse({
       status: 200,
-      body: {
-        candidates: [
-          {
-            content: {
-              role: "model",
-              parts: [
-                {
-                  functionCall: {
-                    name: "classify_tabs",
-                    args: {
-                      assignments: [
-                        {
-                          tab_id: 1,
-                          group_name: "G",
-                          color: "blue",
-                          is_new_group: true,
-                        },
-                      ],
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
+      body: toolResponse([{ tab_id: 1, group_name: "G", color: "blue" }]),
     });
 
     const result = await classifyInitial(
@@ -150,8 +127,74 @@ describe("provider facade", () => {
     );
 
     expect(result.ok).toBe(true);
-    // Default flipped to Gemini in this commit; the request must hit Google.
-    expect(net.requests[0]?.url).toContain("generativelanguage.googleapis.com");
+    expect(net.requests[0]?.url).toBe("https://api.anthropic.com/v1/messages");
+  });
+
+  it("cascade tries chrome-ai first and falls back to Anthropic on chrome-ai miss", async () => {
+    await storage.local.set({ "byok:anthropic": "sk-test" });
+    // Make chrome-ai look unavailable.
+    vi.stubGlobal("LanguageModel", undefined);
+    net.queueResponse({
+      status: 200,
+      body: toolResponse([{ tab_id: 1, group_name: "G", color: "blue" }]),
+    });
+
+    const result = await classifyInitial(
+      [{ id: 1, title: "A", domain: "a.example" }],
+      { language: "en", provider: "anthropic" },
+    );
+
+    expect(result.ok).toBe(true);
+    // Anthropic was reached because chrome-ai bailed.
+    expect(net.requests[0]?.url).toBe("https://api.anthropic.com/v1/messages");
+  });
+
+  it("cascade short-circuits when chrome-ai succeeds (no BYOK call)", async () => {
+    // Provide a working LanguageModel mock.
+    const fakeSession = {
+      prompt: vi.fn(async () =>
+        JSON.stringify({
+          assignments: [
+            {
+              tab_id: 1,
+              group_name: "Code",
+              color: "purple",
+              is_new_group: true,
+            },
+          ],
+        }),
+      ),
+      destroy: vi.fn(),
+    };
+    vi.stubGlobal("LanguageModel", {
+      availability: vi.fn(async () => "available"),
+      create: vi.fn(async () => fakeSession),
+    });
+
+    // Anthropic key is set but should not be reached.
+    await storage.local.set({ "byok:anthropic": "sk-should-not-be-used" });
+
+    const result = await classifyInitial(
+      [{ id: 1, title: "GH", domain: "github.com" }],
+      { language: "en", provider: "anthropic" },
+    );
+
+    expect(result.ok).toBe(true);
+    // No network request — chrome-ai handled it on-device.
+    expect(net.requests).toHaveLength(0);
+  });
+
+  it('cascade does NOT loop when primary is "chrome-ai" itself', async () => {
+    vi.stubGlobal("LanguageModel", undefined);
+    const result = await classifyInitial(
+      [{ id: 1, title: "A", domain: "a.example" }],
+      { language: "en", provider: "chrome-ai" },
+    );
+    // chrome-ai unavailable + primary is also chrome-ai → missing-key, no fallback.
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe("missing-key");
+    expect(net.requests).toHaveLength(0);
   });
 
   it("returns unsupported-provider for an unregistered name", async () => {

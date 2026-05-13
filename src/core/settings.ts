@@ -6,10 +6,14 @@ import type { Settings } from "./types";
 
 const SETTINGS_KEY = "settings:main";
 
-// Default to Gemini: 1,000 RPD free tier, no credit card. Anthropic is
-// still available and selectable from the options page.
+// Default to Anthropic — same model the #1 AI tab classifier on Web Store
+// uses. Chrome built-in AI is tried first automatically via the cascade
+// in src/llm/provider.ts; this default only controls the BYOK fallback.
+// Gemini is still selectable via storage for power users but hidden from
+// the options UI (15-20 RPM rate limit makes it impractical for
+// continuous tab classification).
 export const DEFAULT_SETTINGS: Settings = {
-  llmProvider: "gemini",
+  llmProvider: "anthropic",
   autoClassifyEnabled: true,
   sendUrls: false,
   confirmBeforeRestore: true,

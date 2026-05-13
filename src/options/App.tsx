@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isChromeAiAvailable } from "../llm/chrome-ai";
 import { sendClassifyAll } from "../core/messaging";
 import { DEFAULT_SETTINGS, getSettings, setSettings } from "../core/settings";
 import type { Settings } from "../core/types";
@@ -18,26 +19,18 @@ interface ProviderMeta {
   steps: string[];
 }
 
-const PROVIDERS: Record<ProviderName, ProviderMeta> = {
-  gemini: {
-    label: "Google Gemini Flash-Lite",
-    badge: "Free",
-    badgeClass: "bg-emerald-100 text-emerald-700",
-    blurb: "1,000 requests/day. No credit card. ~30-second key setup.",
-    keyPlaceholder: "AIza...",
-    signupUrl: "https://aistudio.google.com/apikey",
-    steps: [
-      "Open Google AI Studio (link below)",
-      'Click "Get API key" → "Create API key"',
-      "Sign in with Google and accept terms (no card required)",
-      'Copy the key (starts with "AIza...") and paste below',
-    ],
-  },
+// Gemini is intentionally not listed — its 15-20 RPM free-tier limit
+// makes it impractical for continuous tab classification. The provider
+// implementation stays in the codebase for users who opt in via storage,
+// but it isn't surfaced here. See WORK_LOG (Step-4 of the cascade work)
+// for rationale.
+const PROVIDERS: Partial<Record<ProviderName, ProviderMeta>> = {
   anthropic: {
     label: "Anthropic Claude Haiku 4.5",
-    badge: "Paid",
+    badge: "BYOK",
     badgeClass: "bg-amber-100 text-amber-700",
-    blurb: "~$0.50/month at typical usage. Requires credit card.",
+    blurb:
+      "Used as fallback when Chrome's built-in AI isn't ready. ~$0.01/month at typical usage. Requires credit card on Anthropic.",
     keyPlaceholder: "sk-ant-...",
     signupUrl: "https://console.anthropic.com/settings/keys",
     steps: [
@@ -51,52 +44,42 @@ const PROVIDERS: Record<ProviderName, ProviderMeta> = {
 
 export function App() {
   const [settings, setLocalSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [geminiKey, setGeminiKey] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [classifyResult, setClassifyResult] = useState<string | null>(null);
+  const [chromeAiReady, setChromeAiReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     void (async () => {
-      const stored = await chrome.storage.local.get([
-        GEMINI_KEY_STORAGE,
-        ANTHROPIC_KEY_STORAGE,
-      ]);
-      if (typeof stored[GEMINI_KEY_STORAGE] === "string") {
-        setGeminiKey(stored[GEMINI_KEY_STORAGE] as string);
-      }
+      const stored = await chrome.storage.local.get([ANTHROPIC_KEY_STORAGE]);
       if (typeof stored[ANTHROPIC_KEY_STORAGE] === "string") {
         setAnthropicKey(stored[ANTHROPIC_KEY_STORAGE] as string);
       }
-
       const s = await getSettings();
       setLocalSettings(s);
+      setChromeAiReady(await isChromeAiAvailable());
     })();
   }, []);
 
-  const activeProvider = settings.llmProvider;
-  const activeMeta = PROVIDERS[activeProvider];
-  const activeKey = activeProvider === "gemini" ? geminiKey : anthropicKey;
-  const activeStorageKey =
-    activeProvider === "gemini" ? GEMINI_KEY_STORAGE : ANTHROPIC_KEY_STORAGE;
-  const setActiveKey =
-    activeProvider === "gemini" ? setGeminiKey : setAnthropicKey;
+  // Anthropic is the only user-facing BYOK option. Gemini support stays
+  // in the codebase for power-users who flip llmProvider via storage.
+  const activeMeta = PROVIDERS.anthropic!;
 
   const saveKey = async () => {
-    const trimmed = activeKey.trim();
+    const trimmed = anthropicKey.trim();
     if (trimmed.length === 0) {
-      await chrome.storage.local.remove(activeStorageKey);
+      await chrome.storage.local.remove(ANTHROPIC_KEY_STORAGE);
       setStatus(`Cleared ${activeMeta.label} key.`);
     } else {
-      await chrome.storage.local.set({ [activeStorageKey]: trimmed });
+      await chrome.storage.local.set({ [ANTHROPIC_KEY_STORAGE]: trimmed });
       setStatus(`Saved ${activeMeta.label} key.`);
     }
   };
 
   const clearKey = async () => {
-    await chrome.storage.local.remove(activeStorageKey);
-    setActiveKey("");
+    await chrome.storage.local.remove(ANTHROPIC_KEY_STORAGE);
+    setAnthropicKey("");
     setStatus(`Cleared ${activeMeta.label} key.`);
   };
 
@@ -136,63 +119,44 @@ export function App() {
       )}
 
       <section className="mt-6">
-        <h2 className="text-sm font-medium">LLM Provider</h2>
+        <h2 className="text-sm font-medium">Classification</h2>
         <p className="mt-1 text-xs text-neutral-600">
-          Which model classifies your tabs. Switch any time — keys are stored
-          per provider.
+          TabSwirl classifies in three tiers, cheapest first:
         </p>
-        <div className="mt-3 space-y-2">
-          {(Object.keys(PROVIDERS) as ProviderName[]).map((name) => {
-            const meta = PROVIDERS[name];
-            const selected = activeProvider === name;
-            return (
-              <label
-                key={name}
-                className={
-                  "flex cursor-pointer items-start gap-2 rounded-md border p-3 " +
-                  (selected
-                    ? "border-neutral-900 bg-white"
-                    : "border-neutral-200 bg-white")
-                }
-              >
-                <input
-                  type="radio"
-                  name="provider"
-                  checked={selected}
-                  onChange={() => void updateSetting("llmProvider", name)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-baseline gap-2 text-sm font-medium">
-                    <span>{meta.label}</span>
-                    <span
-                      className={
-                        "rounded px-1.5 py-0.5 text-[10px] " + meta.badgeClass
-                      }
-                    >
-                      {meta.badge}
-                    </span>
-                    {name === "gemini" && (
-                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700">
-                        Recommended
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-xs text-neutral-600">
-                    {meta.blurb}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
+        <ol className="ml-5 mt-2 list-decimal space-y-1 text-xs text-neutral-700">
+          <li>
+            <strong>Domain rules</strong> — well-known sites like youtube.com /
+            github.com are categorized instantly with no LLM call.
+          </li>
+          <li>
+            <strong>Chrome built-in AI</strong> — on-device Gemini Nano. Free,
+            no key, no network.{" "}
+            {chromeAiReady === null ? (
+              <em>Checking availability…</em>
+            ) : chromeAiReady ? (
+              <span className="rounded bg-emerald-100 px-1 py-0.5 text-emerald-700">
+                ✓ Ready
+              </span>
+            ) : (
+              <span className="rounded bg-neutral-200 px-1 py-0.5 text-neutral-600">
+                ✗ Unavailable — install Chrome 148+, sign in with Sync, and try
+                again. Falls back to your BYOK key below.
+              </span>
+            )}
+          </li>
+          <li>
+            <strong>BYOK provider</strong> — used when the first two tiers
+            don't fire.
+          </li>
+        </ol>
       </section>
 
       <section className="mt-6">
-        <h2 className="text-sm font-medium">API Key — {activeMeta.label}</h2>
+        <h2 className="text-sm font-medium">{activeMeta.label} (BYOK)</h2>
+        <p className="mt-1 text-xs text-neutral-600">{activeMeta.blurb}</p>
         <p className="mt-1 text-xs text-neutral-600">
           Stored locally in <code>chrome.storage.local</code>. The key only
-          leaves your machine when making API calls to the provider.
+          leaves your machine when making API calls to Anthropic.
         </p>
         <ol className="ml-5 mt-2 list-decimal space-y-1 text-xs text-neutral-700">
           {activeMeta.steps.map((step) => (
@@ -205,14 +169,13 @@ export function App() {
           rel="noreferrer noopener"
           className="mt-2 inline-block text-xs text-blue-600 underline"
         >
-          Open {activeProvider === "gemini" ? "Google AI Studio" : "Anthropic Console"}
-          {" "}→
+          Open Anthropic Console →
         </a>
         <div className="mt-3 flex gap-2">
           <input
             type="password"
-            value={activeKey}
-            onChange={(e) => setActiveKey(e.target.value)}
+            value={anthropicKey}
+            onChange={(e) => setAnthropicKey(e.target.value)}
             placeholder={activeMeta.keyPlaceholder}
             className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
           />
