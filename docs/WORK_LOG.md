@@ -454,6 +454,58 @@
 
 ---
 
+## 5b89714 → f877522 — 2026-05-13 18:18~18:26 KST
+**3-tier classification cascade + 사용자 학습 (Step 1~5)**
+
+연속 5 commit으로 사용자 latency 문제와 분류 안정성 개선. 시장 조사
+(TabPilot/gTabs 패턴 + Chrome 내장 Gemini Nano + 시장 #1이 룰 기반)
+결과를 통합 적용.
+
+### 5b89714 (Step 1) — `src/core/domain-rules.ts` 신설
+- ~210 hand-curated 도메인 → category 매핑. 9 카테고리 (chrome 9 컬러와 1:1).
+- code · ai · social · video · news · shopping · productivity · finance · entertainment.
+- 글로벌 top + 한국 메이저 (naver, kakao, coupang, 한국 은행·음원).
+- Subdomain walk (docs.github.com → github.com), www. strip, 더 구체적 entry 우선 (aws.amazon.com > amazon.com).
+- en/ko 라벨 분리. multi-topic 도메인(google.com 등) 의도적 제외.
+- 13 tests.
+
+### fce2bf8 (Step 2) — enqueueTab에 Tier 1 통합
+- enqueueTab 흐름: T0(cache) → **T1(rule, 신규)** → T2(slow path).
+- T1 hit이면 즉시 applyGroup + cache seed → 다음부터 T0로 들어감.
+- T1은 cache 다음에 배치돼 **사용자 수동 이동(cache에 저장된)이 룰을 이김**.
+- 새 EnqueuePath 태그 `rule-hit`, timing log 추가.
+- 5 신규 케이스 + 기존 stale-cache 테스트 보강.
+
+### d0f9d14 (Step 3) — `src/llm/chrome-ai.ts` 신설
+- Chrome 148+ `LanguageModel` API (on-device Gemini Nano).
+- 자체 function calling 없어서 JSON instruction + JSON.parse + fence strip.
+- 공유 `validate.ts` 통과로 모든 provider 동일한 검증.
+- `availability() !== "available"`이면 missing-key로 cascade trigger.
+- `outputLanguage: "ko"`도 시도(공식 지원 언어는 아니지만 best-effort).
+- 11 tests.
+
+### e5cb70c (Step 4) — Cascade + Gemini UI 숨김
+- `provider.ts`의 `withCascade()` helper: chrome-ai 우선 시도, 실패 시 primary BYOK로 fall through.
+- `DEFAULT_PROVIDER`를 `gemini` → `anthropic`. (Gemini는 코드 유지, UI에서만 제거.)
+- Options 페이지에서 provider 라디오 제거. 대신 "Classification" 섹션이 3-tier 흐름 설명 + Chrome AI 가용성 ✓/✗ 라이브 표시.
+- BYOK 섹션은 Anthropic 단일.
+- 4 cascade tests 추가 (default, miss→fallback, short-circuit, no-loop).
+
+### f877522 (Step 5) — 사용자 수동 이동 → cache 학습
+- `src/background/group-learning.ts` — PRD §4 F1 "사용자 액션 존중" 구현.
+- chrome.tabs.onUpdated(`changeInfo.groupId`) → 새 group의 title/color로 cache seed.
+- chrome.tabGroups.onUpdated(rename/recolor) → 해당 group의 모든 탭 cache 재seed.
+- `isClassifiable` + `isGroupableWindow` 필터.
+- 5 tests + 헬퍼 보강 (chrome.tabGroups.get/onUpdated, fireTabGroupIdChanged 등).
+
+### 전체 영향
+- 사용자가 본 LLM latency 3-15초 문제: 일상 도메인 70-80%가 T1으로 즉시 분류 → LLM 호출 빈도 급감 → free-tier RPM 한도 부담도 함께 해결.
+- Chrome 148+ 사용자는 T2(on-device)로 자동 전환되어 zero-key 경험 가능.
+- 사용자가 그룹 손으로 옮기면 그게 진짜 진실 → 다음부터 그 도메인은 사용자 선택 따라감.
+- 테스트 145 → **164 (총 +19)**, typecheck·build 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
