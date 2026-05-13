@@ -441,6 +441,19 @@
 
 ---
 
+## 8bcd62b — 2026-05-13 17:46 KST
+**chore(icons): new revised source — colorful cartoon pouch with folders**
+
+- **상황:** 사용자가 아이콘 디자인 자체를 교체. 기존: 단색 navy 라인아트(흰 둥근 사각형 안). 신규: 컬러 카툰 — tan drawstring 파우치에 빨강·초록·파랑 폴더가 꽂힌 모습. 시각적 톤이 완전히 바뀜.
+- **PRD §14 단계:** 해당 없음.
+- **핵심 변경:**
+  - `assets/icon-source.png` 교체 (1280×1280, 693KB).
+  - `public/icons/icon-{16,32,48,128}.png` — 동일 1280 소스에서 `sips -z`만 (per-size crop 없음).
+- **부수 효과 (예상 외):** 16px 가독성이 큰 폭 개선됨. 단색 thin line은 다운샘플 시 안티앨리어싱으로 사라지지만, 컬러 블록은 살아남음. 이전 버전에서 sips 한계라고 했던 게 사실은 line-art 한계였던 셈.
+- **검증:** 빌드 깨끗, 126/126 그대로.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - **PRD ↔ CLAUDE.md 경로 불일치:** CLAUDE.md는 `docs/PRD.md`로 참조하나 실제 파일은 `docs/TabSwirl-PRD.md`. 둘 중 하나로 통일 필요 (별 임팩트 없음).
