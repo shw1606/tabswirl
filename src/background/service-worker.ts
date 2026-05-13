@@ -17,6 +17,7 @@ import type {
 } from "../core/messaging";
 import { rehydrateQueue } from "./classifier-queue";
 import { registerGroupRemovalInvalidator } from "./domain-cache";
+import { registerGroupLearningListeners } from "./group-learning";
 import { classifyAllOpenTabs } from "./initial-classifier";
 import { restorePouch } from "./restore";
 import { registerTabListener } from "./tab-listener";
@@ -25,6 +26,7 @@ import { registerWindowTypeListeners } from "./window-type";
 registerTabListener();
 registerWindowTypeListeners();
 registerGroupRemovalInvalidator();
+registerGroupLearningListeners();
 
 chrome.runtime.onInstalled.addListener((details) => {
   void (async () => {

@@ -44,6 +44,8 @@ type OnWindowRemovedListener = (windowId: number) => void;
 
 type OnTabGroupRemovedListener = (group: FakeGroup) => void;
 
+type OnTabGroupUpdatedListener = (group: FakeGroup) => void;
+
 export interface ChromeTabsMock {
   tabs: Map<number, FakeTab>;
   groups: Map<number, FakeGroup>;
@@ -57,6 +59,10 @@ export interface ChromeTabsMock {
   fireWindowRemoved: (id: number) => void;
   /** Trigger chrome.tabGroups.onRemoved for cache invalidation tests. */
   fireTabGroupRemoved: (groupId: number) => void;
+  /** Trigger chrome.tabGroups.onUpdated (rename / recolor). */
+  fireTabGroupUpdated: (groupId: number) => void;
+  /** Trigger chrome.tabs.onUpdated for a tab's groupId change. */
+  fireTabGroupIdChanged: (tabId: number, newGroupId: number) => void;
   /** Trigger chrome.tabs.onUpdated for a given tab id with the in-memory tab data. */
   fireOnUpdated: (
     tabId: number,
@@ -75,6 +81,7 @@ export function installChromeTabsMock(): ChromeTabsMock {
   const onUpdatedListeners = new Set<OnUpdatedListener>();
   const onWindowRemovedListeners = new Set<OnWindowRemovedListener>();
   const onTabGroupRemovedListeners = new Set<OnTabGroupRemovedListener>();
+  const onTabGroupUpdatedListeners = new Set<OnTabGroupUpdatedListener>();
 
   function ensureWindow(id: number, type: chrome.windows.windowTypeEnum = "normal"): void {
     if (!windows.has(id)) windows.set(id, { id, type });
@@ -222,6 +229,13 @@ export function installChromeTabsMock(): ChromeTabsMock {
         return list;
       },
     ),
+    get: vi.fn(async (groupId: number): Promise<FakeGroup> => {
+      const g = groups.get(groupId);
+      if (!g) {
+        throw new Error(`fake chrome.tabGroups.get: unknown groupId ${groupId}`);
+      }
+      return g;
+    }),
     onRemoved: {
       addListener: vi.fn((listener: OnTabGroupRemovedListener) => {
         onTabGroupRemovedListeners.add(listener);
@@ -230,6 +244,18 @@ export function installChromeTabsMock(): ChromeTabsMock {
         onTabGroupRemovedListeners.delete(listener);
       }),
     },
+    onUpdated: {
+      addListener: vi.fn((listener: OnTabGroupUpdatedListener) => {
+        onTabGroupUpdatedListeners.add(listener);
+      }),
+      removeListener: vi.fn((listener: OnTabGroupUpdatedListener) => {
+        onTabGroupUpdatedListeners.delete(listener);
+      }),
+    },
+    // chrome.tabGroups exposes this as a constant the API uses to indicate
+    // "no group". The real Chrome value is -1. Our group-learning code
+    // reads it directly off `chrome.tabGroups.TAB_GROUP_ID_NONE`.
+    TAB_GROUP_ID_NONE: -1,
   };
 
   const windowsApi = {
@@ -315,6 +341,19 @@ export function installChromeTabsMock(): ChromeTabsMock {
       if (!g) throw new Error(`fireTabGroupRemoved: unknown group ${groupId}`);
       groups.delete(groupId);
       for (const l of onTabGroupRemovedListeners) l(g);
+    },
+    fireTabGroupUpdated: (groupId) => {
+      const g = groups.get(groupId);
+      if (!g) throw new Error(`fireTabGroupUpdated: unknown group ${groupId}`);
+      for (const l of onTabGroupUpdatedListeners) l(g);
+    },
+    fireTabGroupIdChanged: (tabId, newGroupId) => {
+      const tab = tabs.get(tabId);
+      if (!tab) throw new Error(`fireTabGroupIdChanged: unknown tab ${tabId}`);
+      tab.groupId = newGroupId;
+      for (const l of onUpdatedListeners) {
+        l(tabId, { groupId: newGroupId } as chrome.tabs.TabChangeInfo, fakeTabToChromeTab(tab));
+      }
     },
     fireOnUpdated: (tabId, changeInfo) => {
       const tab = tabs.get(tabId);
