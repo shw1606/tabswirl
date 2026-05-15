@@ -6,6 +6,8 @@ dist
 .env.local
 .vite
 coverage
+test-results
+playwright-report
 
 # Stray AI-generated images that occasionally land in the project root.
 Gemini_Generated_*
