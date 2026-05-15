@@ -554,6 +554,19 @@
 
 ---
 
+## dadbadf — 2026-05-16 00:19 KST
+**fix(llm): auto-correct color drift instead of failing the batch**
+
+- **상황 (사용자 보고):** `[tabswirl] chrome-ai validation failed: group "Mobile Phones" assigned both green and red`. Gemini Nano가 한 응답에서 같은 group_name에 두 색을 할당 → strict 검증이 reject → cascade가 BYOK로 fall through → 키 없으면 ungrouped로 끝남.
+- **핵심 변경:**
+  - `src/llm/validate.ts` — 색 충돌 시 reject 대신 **첫 색 우선 (first-wins)** 자동 보정. 후속 assignment를 첫 색으로 silent rewrite. `console.debug` 로깅으로 chronic 문제 가시화.
+  - `src/llm/chrome-ai.ts` — `JSON_INSTRUCTION`에 명시적 예시 추가 ("Phones × 3 + Email × 2 같은 색으로 통일"). 모델이 처음부터 일관되게 출력하도록 nudge.
+  - 기존 "rejects inconsistent colors" 테스트를 "auto-corrects color drift (first color wins)"로 갱신. 그 외 검증 경로(invalid color, unknown tab_id, duplicate tab_id, length mismatch)는 strict 유지.
+- **결정:** 작은 모델의 minor 일관성 실수는 보정해서 분류를 살리는 게 사용자에게 좋음. PRD §6.3의 "silent fallback → ungrouped"보다 한 단계 친절. 모델의 의도(같이 묶기)는 보존됨.
+- **검증:** Unit 167/167, E2E 9/9, typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
