@@ -229,6 +229,27 @@ export function App() {
       </section>
 
       <section className="mt-6">
+        <h2 className="text-sm font-medium">Diagnostics</h2>
+        <label className="mt-2 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={!!settings.verboseTiming}
+            onChange={(e) =>
+              void updateSetting("verboseTiming", e.target.checked)
+            }
+          />
+          Verbose timing logs
+        </label>
+        <p className="mt-1 text-xs text-neutral-600">
+          When on, the service worker prints <code>[tabswirl:timing]</code>{" "}
+          lines for every classify step (cache hit / rule hit / queue / flush
+          with snapshot, llm, apply ms). Useful for chasing slow-path latency.
+          Open the SW console at{" "}
+          <code>chrome://extensions</code> → TabSwirl → "service worker".
+        </p>
+      </section>
+
+      <section className="mt-6">
         <h2 className="text-sm font-medium">Language</h2>
         <select
           value={settings.language}

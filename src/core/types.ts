@@ -69,6 +69,9 @@ export interface Settings {
   confirmBeforeRestore: boolean;
   confirmBeforeDiscard: boolean;
   language: "ko" | "en";
+  /** When true, the SW emits [tabswirl:timing] logs for every classify
+   *  step. Used to diagnose slow-path latency. Default false. */
+  verboseTiming?: boolean;
 }
 
 export interface DomainCacheEntry {

@@ -20,6 +20,7 @@
 // than our 500ms debounce. setTimeout + persistence is the right model.
 
 import { matchDomainRule } from "../core/domain-rules";
+import { logTiming } from "../core/log";
 import { extractDomain } from "../core/tabs";
 import type { ChromeGroupColor } from "../core/types";
 import type { ExistingGroup, Language, TabInput } from "../llm/prompts";
@@ -139,7 +140,7 @@ export async function enqueueTab(
         categoryName: cached.categoryName,
         color: cached.color,
       });
-      console.log(
+      logTiming(
         `[tabswirl:timing] fast-path tab=${input.tabId} ${domain} → group=${cached.groupId} (${Math.round(
           performance.now() - tEnter,
         )}ms)`,
@@ -171,7 +172,7 @@ export async function enqueueTab(
         categoryName: rule.categoryName,
         color: rule.color,
       });
-      console.log(
+      logTiming(
         `[tabswirl:timing] rule-hit tab=${input.tabId} ${domain} → ${rule.categoryName} (${Math.round(
           performance.now() - tEnter,
         )}ms)`,
@@ -250,7 +251,7 @@ async function flushWindow(
   const tAfterLlm = performance.now();
 
   if (!result.ok) {
-    console.log(
+    logTiming(
       `[tabswirl:timing] flush(window=${windowId} tabs=${tabCount}) LLM FAILED ` +
         `(${result.error.kind}) snapshot=${Math.round(tAfterSnap - tBeforeSnap)}ms ` +
         `llm=${Math.round(tAfterLlm - tBeforeLlm)}ms ` +

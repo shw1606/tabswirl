@@ -8,6 +8,7 @@
 //   - The SW idles ~30s after no events; module-level state dies. The
 //     event handlers below are the only thing that survives across naps.
 
+import { registerVerboseTimingFromStorage } from "../core/log";
 import { getSettings } from "../core/settings";
 import type {
   ClassifyAllRequest,
@@ -27,6 +28,7 @@ registerTabListener();
 registerWindowTypeListeners();
 registerGroupRemovalInvalidator();
 registerGroupLearningListeners();
+registerVerboseTimingFromStorage();
 
 chrome.runtime.onInstalled.addListener((details) => {
   void (async () => {

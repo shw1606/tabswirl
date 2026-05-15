@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { sendRestorePouch } from "../core/messaging";
+import { sendClassifyAll, sendRestorePouch } from "../core/messaging";
 import { listPouches, removePouch } from "../core/pouch-store";
 import { stashTabs } from "../core/stash";
+import { isClassifiable } from "../core/tabs";
 import type { ChromeGroupColor, Pouch } from "../core/types";
 import { COLOR_DOT_CLASS } from "./colors";
 import { allTabIds, buildTabTree, type TabTree } from "./tab-tree";
@@ -15,6 +16,8 @@ export function App() {
   const [pouches, setPouches] = useState<Pouch[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [windowId, setWindowId] = useState<number | null>(null);
+  const [classifyAllCount, setClassifyAllCount] = useState<number>(0);
+  const [reclassifying, setReclassifying] = useState(false);
 
   const refreshTree = useCallback(async () => {
     const [tabs, groups, win] = await Promise.all([
@@ -46,10 +49,16 @@ export function App() {
     setPouches(await listPouches());
   }, []);
 
+  const refreshClassifyAllCount = useCallback(async () => {
+    const all = await chrome.tabs.query({});
+    setClassifyAllCount(all.filter((t) => isClassifiable(t)).length);
+  }, []);
+
   useEffect(() => {
     void refreshTree();
     void refreshPouches();
-  }, [refreshTree, refreshPouches]);
+    void refreshClassifyAllCount();
+  }, [refreshTree, refreshPouches, refreshClassifyAllCount]);
 
   const toggleTab = (id: number) =>
     setSelected((prev) => {
@@ -118,6 +127,36 @@ export function App() {
     setStatusMessage("Discarded.");
   };
 
+  const handleOpenSettings = () => {
+    chrome.runtime.openOptionsPage();
+  };
+
+  const handleOpenSwDevtools = () => {
+    // Jump to TabSwirl's card on chrome://extensions. From there it's
+    // one click to "service worker" → devtools. There's no public API
+    // to open the SW devtools directly.
+    void chrome.tabs.create({
+      url: `chrome://extensions/?id=${chrome.runtime.id}`,
+    });
+  };
+
+  const handleReclassifyAll = async () => {
+    if (reclassifying) return;
+    setReclassifying(true);
+    setStatusMessage("Re-classifying…");
+    const result = await sendClassifyAll();
+    if (result.ok) {
+      setStatusMessage(
+        `Classified ${result.totalClassified} tab(s) across ${result.windowsTouched} window(s). Errors: ${result.totalErrors}.`,
+      );
+    } else {
+      setStatusMessage(`Failed: ${result.reason}`);
+    }
+    setReclassifying(false);
+    await refreshTree();
+    await refreshClassifyAllCount();
+  };
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
@@ -171,6 +210,39 @@ export function App() {
           </button>
         </footer>
       )}
+
+      <footer className="flex items-center justify-between gap-2 border-t border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] text-neutral-600">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleOpenSettings}
+            className="hover:text-neutral-900 hover:underline"
+            title="Open the options page"
+          >
+            Settings
+          </button>
+          <span aria-hidden>·</span>
+          <button
+            type="button"
+            onClick={handleOpenSwDevtools}
+            className="hover:text-neutral-900 hover:underline"
+            title="Open chrome://extensions to access the service-worker devtools"
+          >
+            SW devtools
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleReclassifyAll()}
+          disabled={reclassifying}
+          className="hover:text-neutral-900 hover:underline disabled:text-neutral-400"
+          title="Re-run domain rules + LLM cascade on every open tab"
+        >
+          {reclassifying
+            ? "Classifying…"
+            : `Classify all ${classifyAllCount} tab${classifyAllCount === 1 ? "" : "s"}`}
+        </button>
+      </footer>
     </div>
   );
 }

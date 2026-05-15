@@ -9,6 +9,7 @@
 // re-classified — CLAUDE.md "Critical invariants" §3. The shared
 // restoringTabIds set is checked first; matching tab ids are skipped.
 
+import { logTiming } from "../core/log";
 import { isClassifiable } from "../core/tabs";
 import { getSettings } from "../core/settings";
 import { enqueueTab } from "./classifier-queue";
@@ -68,7 +69,7 @@ async function handleTabUpdate(
   // small but worth surfacing when something stalls.
   const dt = Math.round(performance.now() - tDispatch);
   if (dt > 30) {
-    console.log(
+    logTiming(
       `[tabswirl:timing] onUpdated→enqueueTab(tab=${tabId}) ${dt}ms (listener overhead)`,
     );
   }
