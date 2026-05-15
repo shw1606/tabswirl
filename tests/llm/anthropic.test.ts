@@ -248,7 +248,11 @@ describe("classifyInitial", () => {
     expect(result.error.reason).toMatch(/invalid color/);
   });
 
-  it("rejects responses where the same group_name has inconsistent colors", async () => {
+  it("auto-corrects color drift within one response (first color wins)", async () => {
+    // Small models occasionally assign the same group_name two different
+    // colors mid-batch. We silently rewrite later assignments to match
+    // the first color, so the classification succeeds with one
+    // consistent group rather than failing the whole batch.
     await storage.local.set({ "byok:anthropic": "sk-test-key" });
     net.queueResponse({
       status: 200,
@@ -269,7 +273,7 @@ describe("classifyInitial", () => {
                 {
                   tab_id: 2,
                   group_name: "Database",
-                  color: "red",
+                  color: "red", // model drift — should be auto-corrected to blue
                   is_new_group: true,
                 },
               ],
@@ -280,11 +284,12 @@ describe("classifyInitial", () => {
     });
 
     const result = await classifyInitial(sampleTabs, { language: "en" });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.kind).toBe("validation");
-    if (result.error.kind !== "validation") return;
-    expect(result.error.reason).toMatch(/both blue and red|both red and blue/);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Both assignments end up on the first-seen color.
+    expect(result.assignments).toHaveLength(2);
+    expect(result.assignments[0]?.color).toBe("blue");
+    expect(result.assignments[1]?.color).toBe("blue");
   });
 
   it("rejects duplicate tab_id entries", async () => {

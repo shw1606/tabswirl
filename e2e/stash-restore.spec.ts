@@ -49,16 +49,10 @@ test("Stash creates a Pouch and closes the source tabs; Restore reopens + consum
 
   // === STASH ===
   // Build a Pouch from the grouped tabs and close them. This mirrors what
-  // popup's "Stash" button does internally.
+  // popup's "Stash" button does internally — we replicate the persistence
+  // side directly via SW evaluate rather than trying to import the bundled
+  // module by its hashed name.
   const pouchId = await serviceWorker.evaluate(async () => {
-    // Dynamic import keeps the SW's normal module graph; nothing extra
-    // loaded into prod build.
-    const { stashTabs } = await import("./assets/messaging-DztB9_bs.js")
-      .catch(async () => import(/* @vite-ignore */ "/src/core/stash.ts"))
-      .catch(() => ({ stashTabs: undefined as never }));
-    void stashTabs;
-    // Simpler: just exercise the persisted side. Build a Pouch manually
-    // via chrome.storage.local writes that match the Pouch shape.
     const tabs = await chrome.tabs.query({});
     const groups = await chrome.tabGroups.query({});
     const target = tabs.filter(

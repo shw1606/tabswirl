@@ -63,7 +63,16 @@ Output format — STRICT:
 - Shape: {"assignments":[{"tab_id":N,"group_name":"S","color":"C","is_new_group":B},…]}
 - One entry per input tab, in any order.
 - "color" MUST be one of: grey, blue, red, yellow, green, pink, purple, cyan, orange.
-- Tabs sharing a group_name MUST share a color.
+- Decide each group's color ONCE before emitting any assignment. EVERY assignment with the same group_name MUST use the same color. Do not switch colors mid-list.
+
+Example (3 phones + 2 emails):
+{"assignments":[
+  {"tab_id":1,"group_name":"Phones","color":"green","is_new_group":true},
+  {"tab_id":2,"group_name":"Phones","color":"green","is_new_group":false},
+  {"tab_id":3,"group_name":"Phones","color":"green","is_new_group":false},
+  {"tab_id":4,"group_name":"Email","color":"yellow","is_new_group":true},
+  {"tab_id":5,"group_name":"Email","color":"yellow","is_new_group":false}
+]}
 `;
 
 /**

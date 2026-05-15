@@ -81,14 +81,20 @@ export function validateAssignments(
     if (!ALLOWED_COLORS.has(color)) {
       return { ok: false, reason: `invalid color "${color}"` };
     }
-    const typedColor = color as ChromeGroupColor;
+    let typedColor = color as ChromeGroupColor;
 
+    // Color consistency: a group_name must have ONE color across the
+    // batch. Small models (esp. Gemini Nano) sometimes drift mid-list
+    // and assign the same name two different colors. Rather than fail
+    // the whole batch and fall through to a slower / paid provider,
+    // we silently auto-correct: first color wins. The model's
+    // intention to put these tabs together is still honored.
     const existing = groupColors.get(group_name);
     if (existing && existing !== typedColor) {
-      return {
-        ok: false,
-        reason: `group "${group_name}" assigned both ${existing} and ${typedColor}`,
-      };
+      console.debug(
+        `[tabswirl] validateAssignments: auto-correcting "${group_name}" color ${typedColor} → ${existing} (first-wins)`,
+      );
+      typedColor = existing;
     }
     groupColors.set(group_name, typedColor);
 
