@@ -532,6 +532,28 @@
 
 ---
 
+## b8eef68 + 80bfb5e — 2026-05-16 KST
+**feat(e2e): Playwright suite — load extension in real Chrome, drive scenarios**
+
+- **상황:** "프론트 짤 때처럼 Playwright로 자동 테스트 할 수 없냐"는 사용자 요청. Chrome 익스텐션도 가능 — Playwright의 `launchPersistentContext + --load-extension`으로 dist/ 로드해서 SW를 Worker handle로 받음.
+- **인프라:**
+  - `playwright.config.ts` — testDir `e2e/`, workers 1 (확장 상태 충돌 회피).
+  - `e2e/helpers/extension.ts` — context · serviceWorker · extensionId 3 fixture + `waitInSW(predicate)` 헬퍼.
+  - `channel: "chromium"` + `headless: false`. headless=new는 MV3 SW 부팅이 불안정 (Chromium 148 기준). 헤드모드는 짧게 창이 뜨지만 SW는 매번 정상 등록.
+- **테스트 9개:**
+  - smoke: SW · popup · options · storage API 작동 확인.
+  - tier1-classify: github.com → "Code" purple 분류, LLM 호출 0회. youtube + instagram → Video / Social. 룰에 없는 도메인은 ungrouped.
+  - byok-cascade: `context.route()`로 `api.anthropic.com` mock → SW가 tool_use 파싱하고 그룹 적용 (디바운스 500ms 포함 full slow path).
+  - stash-restore: 탭 열기 → 그룹화 → Pouch 저장 + 탭 닫기 → popup에서 `restore-pouch` 메시지 → 탭 복원 + Pouch 소멸 (P0 시맨틱 검증).
+- **발견:**
+  - `chrome.runtime.sendMessage`는 SW가 자기 자신에게 못 보냄 → Restore는 popup page에서 보내야 함 (실 사용자 흐름과 동일).
+  - `--headless=new`는 manifest V3 SW가 등록되지 않는 케이스 다수.
+- **Scripts:** `pnpm e2e` (현재 dist 기준), `pnpm e2e:build` (재빌드 후 실행).
+- **setup:** `npx playwright install chromium`으로 Chromium 148 1회 다운로드 (~170MB).
+- **검증:** 9/9 통과, ~12초 전체 실행.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
