@@ -17,5 +17,5 @@
     "noEmit": true,
     "types": ["chrome", "node"]
   },
-  "include": ["src", "tests", "*.config.ts"]
+  "include": ["src", "tests", "e2e", "*.config.ts"]
 }
