@@ -69,9 +69,13 @@ describe("matchDomainRule", () => {
     expect(matchDomainRule("totally-not-a-real-tld.zzz")).toBeNull();
   });
 
-  it("intentionally does NOT match google.com (multi-topic)", () => {
-    // We don't classify google.com because searches span every category.
+  it("intentionally does NOT match multi-topic portal apexes", () => {
+    // Searches and portal homepages span every category; let the LLM
+    // read the title.
     expect(matchDomainRule("google.com")).toBeNull();
+    expect(matchDomainRule("naver.com")).toBeNull();
+    expect(matchDomainRule("daum.net")).toBeNull();
+    expect(matchDomainRule("bing.com")).toBeNull();
   });
 
   it("does match specific Google subdomains we control", () => {
@@ -81,8 +85,18 @@ describe("matchDomainRule", () => {
     expect(matchDomainRule("aistudio.google.com")?.category).toBe("ai");
   });
 
+  it("matches naver subdomains that are single-topic", () => {
+    expect(matchDomainRule("news.naver.com")?.category).toBe("news");
+    expect(matchDomainRule("mail.naver.com")?.category).toBe("productivity");
+    expect(matchDomainRule("cafe.naver.com")?.category).toBe("social");
+    expect(matchDomainRule("finance.naver.com")?.category).toBe("finance");
+    expect(matchDomainRule("pay.naver.com")?.category).toBe("finance");
+    expect(matchDomainRule("shopping.naver.com")?.category).toBe("shopping");
+    expect(matchDomainRule("smartstore.naver.com")?.category).toBe("shopping");
+    expect(matchDomainRule("vibe.naver.com")?.category).toBe("entertainment");
+  });
+
   it("covers Korean major sites", () => {
-    expect(matchDomainRule("naver.com")?.category).toBe("news");
     expect(matchDomainRule("coupang.com")?.category).toBe("shopping");
     expect(matchDomainRule("kakaobank.com")?.category).toBe("finance");
     expect(matchDomainRule("melon.com")?.category).toBe("entertainment");

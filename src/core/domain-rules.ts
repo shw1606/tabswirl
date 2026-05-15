@@ -71,10 +71,13 @@ export interface DomainRule {
 // Notes on multi-topic domains intentionally OMITTED:
 //   - google.com / bing.com / duckduckgo.com / yahoo.com — searches span
 //     every topic; let the LLM classify by title.
+//   - naver.com / daum.net — Korean portals that bundle search, news,
+//     mail, maps, shopping, cafes, blogs, finance under one apex. Same
+//     reasoning as google.com: let the LLM read the title. We DO list
+//     specific naver subdomains that are unambiguously single-topic
+//     (mail.naver.com → productivity, finance.naver.com → finance, …).
 //   - reddit.com is borderline; left in `social` because most users use
 //     it socially.
-//   - naver.com / daum.net are Korean portals (multi-topic) but the
-//     homepage usage is so dominant we map to `news`.
 
 export const DOMAIN_RULES: ReadonlyArray<DomainRule> = [
   // === Code (purple) ===
@@ -218,6 +221,7 @@ export const DOMAIN_RULES: ReadonlyArray<DomainRule> = [
   { domain: "whatsapp.com", category: "social" },
   { domain: "weibo.com", category: "social" },
   { domain: "band.us", category: "social" },
+  { domain: "cafe.naver.com", category: "social" },
 
   // === Video (red) ===
   { domain: "youtube.com", category: "video" },
@@ -269,8 +273,9 @@ export const DOMAIN_RULES: ReadonlyArray<DomainRule> = [
   { domain: "macrumors.com", category: "news" },
   { domain: "medium.com", category: "news" },
   { domain: "substack.com", category: "news" },
-  { domain: "naver.com", category: "news" }, // multi-topic, but typically used as a news/portal entry point
-  { domain: "daum.net", category: "news" },
+  // naver.com / daum.net apex deliberately NOT listed (multi-topic;
+  // see file header). Specific subdomains below.
+  { domain: "news.naver.com", category: "news" },
   { domain: "chosun.com", category: "news" },
   { domain: "donga.com", category: "news" },
   { domain: "hani.co.kr", category: "news" },
@@ -307,6 +312,7 @@ export const DOMAIN_RULES: ReadonlyArray<DomainRule> = [
   { domain: "oliveyoung.co.kr", category: "shopping" },
   { domain: "kakaomakers.com", category: "shopping" },
   { domain: "smartstore.naver.com", category: "shopping" },
+  { domain: "shopping.naver.com", category: "shopping" },
 
   // === Productivity (cyan) ===
   { domain: "notion.so", category: "productivity" },
@@ -345,6 +351,7 @@ export const DOMAIN_RULES: ReadonlyArray<DomainRule> = [
   { domain: "obsidian.md", category: "productivity" },
   { domain: "kakaowork.com", category: "productivity" },
   { domain: "dooray.com", category: "productivity" },
+  { domain: "mail.naver.com", category: "productivity" },
 
   // === Finance (blue) ===
   { domain: "chase.com", category: "finance" },
@@ -378,6 +385,8 @@ export const DOMAIN_RULES: ReadonlyArray<DomainRule> = [
   { domain: "kbanknow.com", category: "finance" },
   { domain: "upbit.com", category: "finance" },
   { domain: "bithumb.com", category: "finance" },
+  { domain: "finance.naver.com", category: "finance" },
+  { domain: "pay.naver.com", category: "finance" },
 
   // === Entertainment (grey) ===
   { domain: "spotify.com", category: "entertainment" },
