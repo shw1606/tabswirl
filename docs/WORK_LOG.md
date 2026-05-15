@@ -506,6 +506,18 @@
 
 ---
 
+## 07fa9e8 — 2026-05-15 21:06 KST
+**fix(rules): drop naver.com / daum.net apex, add specific subdomains**
+
+- **상황:** 사용자가 `naver.com → news` 매핑이 잘못이라고 지적. naver는 검색/메일/지도/쇼핑/카페/블로그/뉴스 모두 한 apex 아래라 google.com과 동일 케이스.
+- **핵심 변경:**
+  - apex `naver.com`, `daum.net` 제거 — 검색·블로그 등 multi-topic 페이지는 LLM이 title로 분류.
+  - 단일 주제 naver subdomain 추가: `news.naver.com` (news), `mail.naver.com` (productivity), `cafe.naver.com` (social), `finance.naver.com`/`pay.naver.com` (finance), `shopping.naver.com` (shopping). `smartstore.naver.com`·`vibe.naver.com`은 기존 유지.
+  - 파일 header 주석에 정책 명시. daum.net은 subdomain도 추가 안 함 (Kakao로 흡수돼 사실상 deprecated).
+- **검증:** 165/165 (기존 164 + 신규 1 케이스 그룹), typecheck 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
