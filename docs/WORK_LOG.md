@@ -567,6 +567,27 @@
 
 ---
 
+## a55f925 — 2026-05-16 00:32 KST
+**feat: verbose timing toggle + popup quick-actions footer**
+
+- **상황 (사용자 요청):**
+  1. 룰에 없는 도메인은 Chrome Nano도 응답이 길어서 timing 로그가 필요한데, 항상 켜져있는 게 부담. **옵션에 verbose 토글** 원함.
+  2. `chrome://extensions` 들어가지 않고도 **popup에서 옵션 페이지 / SW devtools / Re-classify all 버튼** 접근 가능하게.
+- **핵심 변경:**
+  - `src/core/log.ts` 신설 — `verbose` 모듈 변수 + `logTiming()` sync gate. `registerVerboseTimingFromStorage()`가 SW 부팅 시 settings 읽고 `chrome.storage.onChanged` 구독해서 토글 즉시 반영.
+  - `src/core/types.ts` — `Settings.verboseTiming?: boolean` (default false).
+  - `src/background/classifier-queue.ts` + `tab-listener.ts` — 모든 `[tabswirl:timing] console.log` → `logTiming(...)`로 교체. 실패·debug 로그(no BYOK key, http 에러 등)는 그대로.
+  - `src/background/service-worker.ts` — entry에 `registerVerboseTimingFromStorage()` 추가.
+  - `src/options/App.tsx` — "Diagnostics" 섹션 + verboseTiming checkbox + 설명.
+  - `src/popup/App.tsx` — 하단에 thin footer 추가. `Settings · SW devtools · Classify all N tabs`.
+    - Settings → `chrome.runtime.openOptionsPage()`
+    - SW devtools → `chrome.tabs.create({url: "chrome://extensions/?id=" + runtime.id})` (SW devtools 직접 여는 public API 없음, 한 단계 더 필요)
+    - Classify all N → `sendClassifyAll()` 메시지. N = `chrome.tabs.query({})` ∩ `isClassifiable`.
+- **결정:** verbose는 default OFF — 일반 사용자에게 console 노이즈 X. 진단 시에만 켬.
+- **검증:** Unit 167/167, E2E 9/9, typecheck·build 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
