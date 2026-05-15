@@ -518,6 +518,20 @@
 
 ---
 
+## 3c7ce94 — 2026-05-15 23:39 KST
+**fix: chrome-ai topK pairing + Tier 1 rules in classifyAllOpenTabs**
+
+- **상황 (사용자 e2e 보고):**
+  - SW 콘솔에 `chrome-ai session create failed: Initializing a new session must either specify both topK and temperature, or neither of them.`
+  - "Re-classify all open tabs now" 눌렀더니 룰에 있는 도메인(github/youtube/instagram 등)도 LLM으로 떨어져서 BYOK key 없을 때 missing-key로 fail.
+- **핵심 변경:**
+  - `src/llm/chrome-ai.ts` — `LanguageModel.create({ ..., temperature: 0.2 })` → `temperature: 0.2, topK: 3` 페어로 전달. Chrome Prompt API의 페어 강제 요건 충족.
+  - `src/background/initial-classifier.ts` — `classifyOneWindow`에 Tier 1 룰 pre-filter 추가. 룰 hit 탭은 `applyGroup` + `seedDomainEntries`로 즉시 처리하고, miss만 LLM에 보냄. `namedGroupIds`/`namedColors`가 룰 pass와 LLM chunks 사이에 공유돼서 같은 category name이면 하나의 chrome group으로 머지.
+- **테스트:** 기존 LLM happy-path 테스트가 룰에 잡히는 도메인을 쓰고 있어서 non-rule synthetic domain으로 교체. 신규 케이스: "every tab matches a rule → no LLM call", "rule-hit + LLM-hit with same name → one group". Suite 167/167.
+- **영향:** 사용자가 BYOK 키 없이도 룰에 있는 도메인은 즉시 분류됨. Chrome AI도 정상 동작.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
