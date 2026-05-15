@@ -240,7 +240,7 @@ export function App() {
         >
           {reclassifying
             ? "Classifying…"
-            : `Classify all ${classifyAllCount} tab${classifyAllCount === 1 ? "" : "s"}`}
+            : `Re-classify ${classifyAllCount} tab${classifyAllCount === 1 ? "" : "s"}`}
         </button>
       </footer>
     </div>
