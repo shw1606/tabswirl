@@ -14,6 +14,12 @@ Two memory scales for your browser:
 The "consume-on-restore" Pouch is the defining product semantic. No "session
 graveyard" — once you take a Pouch out, it's gone.
 
+<p align="center">
+  <img src="docs/screenshots/popup-stash.png" alt="Popup — Stash view" width="300" />
+  &nbsp;
+  <img src="docs/screenshots/popup-pouches.png" alt="Popup — Pouches view" width="300" />
+</p>
+
 ---
 
 ## Status
@@ -48,6 +54,10 @@ Then in Chrome:
 ## Configure
 
 Open the options page (popup → **Settings**, or right-click the toolbar icon).
+
+<p align="center">
+  <img src="docs/screenshots/options.png" alt="Options page" width="600" />
+</p>
 
 ### LLM provider
 

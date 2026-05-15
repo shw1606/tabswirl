@@ -15,6 +15,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // The screenshot generator is its own thing — see `pnpm screenshots`.
+  // Default `pnpm e2e` filters it out via --grep-invert in package.json.
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
