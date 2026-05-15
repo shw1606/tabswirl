@@ -133,7 +133,12 @@ async function classifyOnce(
           content: systemPrompt + "\n" + JSON_INSTRUCTION,
         },
       ],
+      // Chrome's Prompt API requires temperature + topK to be set as a
+      // pair — passing only one throws "must either specify both topK
+      // and temperature, or neither of them." Low values keep the
+      // classifier deterministic.
       temperature: 0.2,
+      topK: 3,
       outputLanguage: options.language === "ko" ? "ko" : "en",
     });
   } catch (err) {

@@ -1,14 +1,19 @@
 // One-shot bulk classification of all currently-open tabs across every
-// window. Triggered by chrome.runtime.onInstalled (fresh install / update)
-// and by the user toggling auto-classify off → on.
+// window. Triggered by chrome.runtime.onInstalled (fresh install / update),
+// chrome.runtime.onStartup, and by the user clicking "Re-classify all
+// open tabs now" in options.
 //
 // Strategy (PRD §4 F1, §8.1.a):
 //   - For each window, gather classifiable tabs (isClassifiable predicate).
-//   - Chunk to CHUNK_SIZE per LLM call (context-size guard for 50+ tab windows).
-//   - On success: create chrome tab groups, seed the domain cache.
-//   - On failure: silently leave tabs ungrouped; the user's workflow is
-//     never blocked by a classification error.
+//   - Tier 1: bucket rule-matched tabs by category and apply groups
+//     directly (no LLM call). Seed the cache so subsequent same-domain
+//     tabs hit T0 fast path.
+//   - Tier 2: only tabs that didn't match a rule are sent to the LLM,
+//     chunked to CHUNK_SIZE per call (context-size guard for big windows).
+//   - On LLM failure: silently leave the rule-miss tabs ungrouped — the
+//     rule-hit tabs are already grouped, the user keeps the partial win.
 
+import { matchDomainRule } from "../core/domain-rules";
 import { extractDomain, isClassifiable } from "../core/tabs";
 import type { ChromeGroupColor } from "../core/types";
 import type { Language, TabInput } from "../llm/prompts";
@@ -88,14 +93,64 @@ async function classifyOneWindow(
 
   if (tabs.length === 0) return result;
 
-  // Track group-name → groupId across chunks so a category that
-  // appears in chunk 1 and chunk 2 lands in the same chrome tabGroup.
+  // Track group-name → groupId across the rule pass AND every LLM chunk
+  // so a category that appears in both lands in the same chrome group.
   const namedGroupIds = new Map<string, number>();
-  // And remember the color the LLM picked for each name (so the second
-  // chunk doesn't accidentally rename a group's color).
+  // Keep the first-seen color stable (rule-defined color beats whatever
+  // the LLM later guesses for the same category name).
   const namedColors = new Map<string, ChromeGroupColor>();
 
-  for (const batch of chunk(tabs, CHUNK_SIZE)) {
+  // === Tier 1: domain rules ===
+  // Split tabs into rule-hits (bucketed by category) and rule-misses
+  // (to be sent to the LLM).
+  const ruleBatches = new Map<
+    string,
+    { color: ChromeGroupColor; tabIds: number[]; domains: string[] }
+  >();
+  const remainingTabs: TabWithDomain[] = [];
+  for (const t of tabs) {
+    const rule = matchDomainRule(t.domain, options.language);
+    if (rule) {
+      const bucket = ruleBatches.get(rule.categoryName) ?? {
+        color: rule.color,
+        tabIds: [],
+        domains: [],
+      };
+      bucket.tabIds.push(t.id);
+      bucket.domains.push(t.domain);
+      ruleBatches.set(rule.categoryName, bucket);
+    } else {
+      remainingTabs.push(t);
+    }
+  }
+
+  for (const [name, bucket] of ruleBatches) {
+    const groupId = await applyGroup({
+      windowId,
+      tabIds: bucket.tabIds,
+      name,
+      color: bucket.color,
+    });
+    if (groupId === null) continue;
+    namedGroupIds.set(name, groupId);
+    namedColors.set(name, bucket.color);
+    result.classified += bucket.tabIds.length;
+    result.groupsCreated++;
+    await seedDomainEntries(
+      windowId,
+      bucket.domains.map((domain) => ({
+        domain,
+        groupId,
+        categoryName: name,
+        color: bucket.color,
+      })),
+    );
+  }
+
+  // === Tier 2: LLM for whatever didn't match a rule ===
+  if (remainingTabs.length === 0) return result;
+
+  for (const batch of chunk(remainingTabs, CHUNK_SIZE)) {
     const llm = await classifyInitial(batch.map((t) => t.input), options);
 
     if (!llm.ok) {
@@ -125,7 +180,8 @@ async function classifyOneWindow(
       byGroup.set(a.group_name, bucket);
     }
 
-    // Apply groups, reusing chrome groupIds across chunks when the name matches.
+    // Apply groups, reusing chrome groupIds across chunks AND across
+    // the earlier rule pass when the name matches.
     for (const [name, bucket] of byGroup) {
       const existingGroupId = namedGroupIds.get(name);
       const groupId = await applyGroup({

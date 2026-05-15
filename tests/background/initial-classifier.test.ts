@@ -54,12 +54,13 @@ describe("classifyAllOpenTabs", () => {
     vi.unstubAllGlobals();
   });
 
-  it("creates groups from a successful single-batch LLM response", async () => {
+  it("creates groups from a successful single-batch LLM response (rule-miss domains)", async () => {
+    // These domains aren't in the Tier 1 rules table — the LLM must run.
     await env.storage.local.set({ "byok:anthropic": "sk-test" });
     env.tabs.seedTabs([
-      { id: 1, windowId: 10, groupId: -1, title: "Postgres", url: "https://postgresql.org/" },
-      { id: 2, windowId: 10, groupId: -1, title: "Redis", url: "https://redis.io/" },
-      { id: 3, windowId: 10, groupId: -1, title: "GitHub", url: "https://github.com/" },
+      { id: 1, windowId: 10, groupId: -1, title: "Niche DB", url: "https://niche-database.example/" },
+      { id: 2, windowId: 10, groupId: -1, title: "Niche DB 2", url: "https://other-db.example/" },
+      { id: 3, windowId: 10, groupId: -1, title: "Dev blog", url: "https://random-dev-blog.example/" },
     ]);
     net.queueResponse({
       status: 200,
@@ -82,30 +83,77 @@ describe("classifyAllOpenTabs", () => {
       errors: 0,
     });
 
-    // Chrome groups created with right color/title.
     const groups = [...env.tabs.groups.values()];
     expect(groups).toHaveLength(2);
     const byName = new Map(groups.map((g) => [g.title, g]));
     expect(byName.get("Database")?.color).toBe("blue");
     expect(byName.get("Code")?.color).toBe("purple");
-
-    // Tabs reassigned to their groups.
     expect(env.tabs.tabs.get(1)?.groupId).toBe(byName.get("Database")!.id);
-    expect(env.tabs.tabs.get(2)?.groupId).toBe(byName.get("Database")!.id);
     expect(env.tabs.tabs.get(3)?.groupId).toBe(byName.get("Code")!.id);
 
-    // Domain cache seeded.
     const cacheKey = "cache:domains:10";
     const cache = (await env.storage.session.get(cacheKey))[cacheKey] as Record<
       string,
       { groupId: number; categoryName: string }
     >;
     expect(Object.keys(cache).sort()).toEqual([
-      "github.com",
-      "postgresql.org",
-      "redis.io",
+      "niche-database.example",
+      "other-db.example",
+      "random-dev-blog.example",
     ]);
-    expect(cache["postgresql.org"]?.categoryName).toBe("Database");
+  });
+
+  it("applies Tier 1 rules without calling LLM when every tab matches a rule", async () => {
+    // No BYOK key, no fetch queue — these tabs MUST be classified
+    // without touching the LLM at all.
+    env.tabs.seedTabs([
+      { id: 1, windowId: 10, groupId: -1, title: "GH", url: "https://github.com/" },
+      { id: 2, windowId: 10, groupId: -1, title: "YT", url: "https://youtube.com/" },
+      { id: 3, windowId: 10, groupId: -1, title: "IG", url: "https://instagram.com/" },
+    ]);
+
+    const result = await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
+
+    expect(result.totalClassified).toBe(3);
+    expect(result.totalErrors).toBe(0);
+    expect(net.requests).toHaveLength(0); // no LLM call
+
+    // Three groups: Code, Video, Social.
+    const groupTitles = [...env.tabs.groups.values()].map((g) => g.title).sort();
+    expect(groupTitles).toEqual(["Code", "Social", "Video"]);
+
+    // Cache seeded for each domain.
+    const cacheKey = "cache:domains:10";
+    const cache = (await env.storage.session.get(cacheKey))[cacheKey] as Record<
+      string,
+      { categoryName: string }
+    >;
+    expect(cache["github.com"]?.categoryName).toBe("Code");
+    expect(cache["youtube.com"]?.categoryName).toBe("Video");
+    expect(cache["instagram.com"]?.categoryName).toBe("Social");
+  });
+
+  it("rule-hit + LLM-hit with same category name merge into one chrome group", async () => {
+    await env.storage.local.set({ "byok:anthropic": "sk-test" });
+    env.tabs.seedTabs([
+      { id: 1, windowId: 10, groupId: -1, title: "GH", url: "https://github.com/" }, // rule → Code
+      { id: 2, windowId: 10, groupId: -1, title: "Niche", url: "https://niche-dev.example/" }, // LLM → Code
+    ]);
+    net.queueResponse({
+      status: 200,
+      body: toolResponse([
+        { tab_id: 2, group_name: "Code", color: "purple" },
+      ]),
+    });
+
+    await classifyAllOpenTabs({ language: "en", provider: "anthropic" });
+
+    // Both tabs share the same group (rule's Code, not a new one).
+    const id1 = env.tabs.tabs.get(1)?.groupId;
+    const id2 = env.tabs.tabs.get(2)?.groupId;
+    expect(id1).toBe(id2);
+    // Exactly one group exists in the window.
+    expect(env.tabs.groups.size).toBe(1);
   });
 
   it("skips classifiable-excluded tabs (incognito, pinned, internal URLs, empty title)", async () => {
