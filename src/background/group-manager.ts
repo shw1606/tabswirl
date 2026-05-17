@@ -34,6 +34,15 @@ export interface ApplyGroupInput {
  * wasn't possible (no tabs / chrome.tabs.group rejected — e.g. the
  * window is a PWA / popup / panel that doesn't support tab groups).
  *
+ * Duplicate-group prevention: when no explicit `existingGroupId` is
+ * given, we query the window's groups and reuse any group whose title
+ * already equals `input.name`. Without this, callers that don't track
+ * group ids (Tier 1 rules in enqueueTab, the rule pass in
+ * initial-classifier, a second classifyAll run) each mint a fresh
+ * "Code" / "Social" / … group and the window fills with same-name
+ * duplicates. Resolving by name here makes every caller safe by
+ * default — single source of truth.
+ *
  * Throw-safe: chrome.tabs.group can throw "Grouping is not supported
  * by tabs in this window." for non-normal window types. We catch that
  * here so one bad window can't cascade through the caller.
@@ -41,15 +50,28 @@ export interface ApplyGroupInput {
 export async function applyGroup(input: ApplyGroupInput): Promise<number | null> {
   if (input.tabIds.length === 0) return null;
 
+  // Resolve the target group: explicit id > existing same-name group
+  // in this window > create new.
+  let targetGroupId = input.existingGroupId;
+  let mergedIntoExisting = false;
+  if (targetGroupId === undefined) {
+    try {
+      const groups = await chrome.tabGroups.query({ windowId: input.windowId });
+      const match = groups.find((g) => (g.title ?? "") === input.name);
+      if (match) {
+        targetGroupId = match.id;
+        mergedIntoExisting = true;
+      }
+    } catch {
+      // query unavailable (non-normal window etc.) — fall through to create.
+    }
+  }
+
   const groupOptions: chrome.tabs.GroupOptions = {
     tabIds: input.tabIds,
     createProperties:
-      input.existingGroupId === undefined
-        ? { windowId: input.windowId }
-        : undefined,
-    ...(input.existingGroupId !== undefined
-      ? { groupId: input.existingGroupId }
-      : {}),
+      targetGroupId === undefined ? { windowId: input.windowId } : undefined,
+    ...(targetGroupId !== undefined ? { groupId: targetGroupId } : {}),
   };
 
   let groupId: number;
@@ -63,21 +85,88 @@ export async function applyGroup(input: ApplyGroupInput): Promise<number | null>
     return null;
   }
 
-  try {
-    await chrome.tabGroups.update(groupId, {
-      title: input.name,
-      color: input.color,
-    });
-  } catch (err) {
-    // The group was created but couldn't be named/colored. Surface the
-    // error and still return the id — the tabs are at least grouped.
-    console.warn(
-      `[tabswirl] chrome.tabGroups.update failed for group ${groupId}:`,
-      err instanceof Error ? err.message : err,
-    );
+  // When we merged into a pre-existing same-name group, leave its
+  // title/color alone — the user may have recolored it, and the
+  // group-learning listener treats that as intent. Only stamp name +
+  // color when this group is (effectively) ours to define.
+  if (!mergedIntoExisting) {
+    try {
+      await chrome.tabGroups.update(groupId, {
+        title: input.name,
+        color: input.color,
+      });
+    } catch (err) {
+      // The group exists but couldn't be named/colored. Surface the
+      // error and still return the id — the tabs are at least grouped.
+      console.warn(
+        `[tabswirl] chrome.tabGroups.update failed for group ${groupId}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   return groupId;
+}
+
+/**
+ * Merge same-name groups in a window into one. Chrome auto-removes a
+ * group once its last tab leaves, so moving every duplicate's tabs into
+ * the first group of that name cleans up the window. Returns the number
+ * of duplicate groups absorbed.
+ *
+ * Called at the start of classifyAllOpenTabs so the "Re-classify all
+ * open tabs" action also repairs any duplicates that accumulated before
+ * the applyGroup name-resolution fix landed (or from manual edits).
+ */
+export async function consolidateDuplicateGroups(
+  windowId: number,
+): Promise<number> {
+  let groups: chrome.tabGroups.TabGroup[];
+  try {
+    groups = await chrome.tabGroups.query({ windowId });
+  } catch {
+    return 0;
+  }
+
+  const byTitle = new Map<string, chrome.tabGroups.TabGroup[]>();
+  for (const g of groups) {
+    const title = g.title ?? "";
+    if (!title) continue; // never merge untitled groups
+    const list = byTitle.get(title) ?? [];
+    list.push(g);
+    byTitle.set(title, list);
+  }
+
+  let absorbed = 0;
+  for (const [, list] of byTitle) {
+    if (list.length < 2) continue;
+    // Keep the first; fold the rest in. Chrome deletes the now-empty
+    // duplicates, which fires onRemoved → domain-cache self-heals.
+    const keep = list[0]!;
+    for (let i = 1; i < list.length; i++) {
+      const dup = list[i]!;
+      let tabs: chrome.tabs.Tab[];
+      try {
+        tabs = await chrome.tabs.query({ groupId: dup.id });
+      } catch {
+        continue;
+      }
+      const ids = tabs
+        .map((t) => t.id)
+        .filter((x): x is number => typeof x === "number");
+      if (ids.length === 0) continue;
+      try {
+        await chrome.tabs.group({ tabIds: ids, groupId: keep.id });
+        absorbed++;
+      } catch (err) {
+        console.warn(
+          `[tabswirl] consolidateDuplicateGroups: merge failed for "${dup.title}":`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+  }
+  return absorbed;
 }
 
 /**

@@ -93,6 +93,41 @@ test("youtube.com and instagram.com end up in distinct rule groups", async ({
   expect(titles).toContain("Social");
 });
 
+test("multiple Code-rule domains land in ONE group, not duplicates", async ({
+  context,
+  serviceWorker,
+}) => {
+  // github / gitlab / stackoverflow are all Tier-1 → "Code". Opening
+  // them on first visit (cache miss) used to mint a fresh "Code" group
+  // each time. They must all share one group now.
+  for (const host of ["github.com", "gitlab.com", "stackoverflow.com"]) {
+    const p = await context.newPage();
+    await loadFakedHostPage(p, host, host);
+  }
+
+  await waitInSW(
+    serviceWorker,
+    async () => {
+      const tabs = await chrome.tabs.query({});
+      const code = tabs.filter(
+        (t) =>
+          t.url?.startsWith("https://") &&
+          t.groupId !== undefined &&
+          t.groupId !== -1,
+      );
+      return code.length >= 3;
+    },
+    { timeout: 10_000 },
+  );
+
+  const codeGroups = await serviceWorker.evaluate(async () => {
+    const groups = await chrome.tabGroups.query({});
+    return groups.filter((g) => g.title === "Code").map((g) => g.id);
+  });
+
+  expect(codeGroups).toHaveLength(1);
+});
+
 test("a domain NOT in the rules table does NOT get auto-grouped", async ({
   context,
   serviceWorker,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addTabsToGroup,
   applyGroup,
+  consolidateDuplicateGroups,
   snapshotWindowGroups,
   ungroupTabs,
 } from "../../src/background/group-manager";
@@ -196,5 +197,82 @@ describe("group-manager", () => {
 
     const snapshot = await snapshotWindowGroups(10, 2);
     expect(snapshot[0]?.sampleTabs).toHaveLength(2);
+  });
+
+  it("applyGroup reuses an existing same-name group instead of duplicating", async () => {
+    mock.seedTabs([
+      { id: 1, windowId: 10, groupId: -1, title: "A", url: "https://a.dev/" },
+      { id: 2, windowId: 10, groupId: -1, title: "B", url: "https://b.dev/" },
+    ]);
+    // First call (no existingGroupId) creates the "Code" group.
+    const first = await applyGroup({
+      windowId: 10,
+      tabIds: [1],
+      name: "Code",
+      color: "purple",
+    });
+    // Second call, also without existingGroupId — must merge into the
+    // first "Code" group, not mint a new one.
+    const second = await applyGroup({
+      windowId: 10,
+      tabIds: [2],
+      name: "Code",
+      color: "purple",
+    });
+
+    expect(second).toBe(first);
+    expect(mock.groups.size).toBe(1);
+    expect(mock.tabs.get(1)?.groupId).toBe(first);
+    expect(mock.tabs.get(2)?.groupId).toBe(first);
+  });
+
+  it("applyGroup does not overwrite a user-recolored same-name group", async () => {
+    mock.seedTabs([
+      { id: 1, windowId: 10, groupId: -1, title: "A", url: "https://a.dev/" },
+      { id: 2, windowId: 10, groupId: -1, title: "B", url: "https://b.dev/" },
+    ]);
+    const gid = await applyGroup({
+      windowId: 10,
+      tabIds: [1],
+      name: "Code",
+      color: "purple",
+    });
+    // Simulate the user recoloring "Code" to blue.
+    mock.groups.get(gid!)!.color = "blue";
+
+    // A rule-driven call still wants purple, but it must NOT clobber
+    // the user's blue when merging into the existing group.
+    await applyGroup({
+      windowId: 10,
+      tabIds: [2],
+      name: "Code",
+      color: "purple",
+    });
+
+    expect(mock.groups.get(gid!)?.color).toBe("blue");
+  });
+
+  it("consolidateDuplicateGroups folds same-name groups into one", async () => {
+    mock.seedTabs([
+      { id: 1, windowId: 10, groupId: -1, title: "A", url: "https://a/" },
+      { id: 2, windowId: 10, groupId: -1, title: "B", url: "https://b/" },
+      { id: 3, windowId: 10, groupId: -1, title: "C", url: "https://c/" },
+    ]);
+    // Two separate "Code" groups (the bug) + one "News".
+    mock.groups.set(900, { id: 900, windowId: 10, title: "Code", color: "purple" });
+    mock.groups.set(901, { id: 901, windowId: 10, title: "Code", color: "purple" });
+    mock.groups.set(902, { id: 902, windowId: 10, title: "News", color: "yellow" });
+    mock.tabs.get(1)!.groupId = 900;
+    mock.tabs.get(2)!.groupId = 901;
+    mock.tabs.get(3)!.groupId = 902;
+
+    const absorbed = await consolidateDuplicateGroups(10);
+
+    expect(absorbed).toBe(1); // one duplicate "Code" folded in
+    // Both code tabs now in the kept group (900).
+    expect(mock.tabs.get(1)?.groupId).toBe(900);
+    expect(mock.tabs.get(2)?.groupId).toBe(900);
+    // News untouched.
+    expect(mock.tabs.get(3)?.groupId).toBe(902);
   });
 });

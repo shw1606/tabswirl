@@ -19,7 +19,7 @@ import type { ChromeGroupColor } from "../core/types";
 import type { Language, TabInput } from "../llm/prompts";
 import { classifyInitial, type LlmProviderName } from "../llm/provider";
 import { seedDomainEntries } from "./domain-cache";
-import { applyGroup } from "./group-manager";
+import { applyGroup, consolidateDuplicateGroups } from "./group-manager";
 
 /** Max tabs per LLM batch. Prompt size guard for huge windows. PRD §4 F1. */
 export const CHUNK_SIZE = 30;
@@ -92,6 +92,11 @@ async function classifyOneWindow(
   };
 
   if (tabs.length === 0) return result;
+
+  // Fold any pre-existing same-name duplicate groups together first, so
+  // a "Re-classify all" also repairs windows that accumulated dupes
+  // before the applyGroup name-resolution fix (or via manual edits).
+  await consolidateDuplicateGroups(windowId);
 
   // Track group-name → groupId across the rule pass AND every LLM chunk
   // so a category that appears in both lands in the same chrome group.
