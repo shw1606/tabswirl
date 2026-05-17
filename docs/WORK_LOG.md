@@ -602,6 +602,22 @@
 
 ---
 
+## b4280e5 — 2026-05-17 16:57 KST
+**feat(cascade): user-configurable Tier 2/3 order (on-device vs BYOK first)**
+
+- **PRD 매핑:** §6.3 (auto-classify 전략)·§14 — 분류 cascade 사용자 제어. (기존 3-tier 아키텍처의 노브이지 §10 Phase 2 아님, 스코프 내.)
+- **상황 (사용자 요청):** 우선순위가 `도메인 사전 > Chrome Nano > BYOK Claude Haiku`로 고정. Chrome Nano ↔ BYOK 순서를 사용자가 바꿀 수 있게.
+- **핵심 변경:**
+  - `src/core/types.ts` — `Tier2Order = "on-device-first" | "byok-first"` 타입 + `Settings.tier2Order` 필드 (단일 진실, provider.ts가 type import).
+  - `src/core/settings.ts` — `DEFAULT_SETTINGS.tier2Order = "on-device-first"` (= 기존 동작 무변경).
+  - `src/llm/provider.ts` — `withCascade(primary, order, call)`로 재작성. 하드코딩된 chrome-ai-우선 분기를 순서 있는 provider chain으로 일반화. 전 실패 시 마지막 시도 에러 반환(actionable). **불변식 보존:** primary 미등록이면 order 무관 `unsupported-provider` (chrome-ai는 가속기지 대체자 아님) — 기존 provider 테스트 green 유지.
+  - 옵션 백 스레딩: `classifier-queue`(FlushOptions·EnqueueInput→scheduleFlush), `initial-classifier`(RunOptions), `tab-listener`, `service-worker`(onInstalled·onStartup·onMessage 3곳)에서 `settings.tier2Order` 전달.
+  - `src/options/App.tsx` — Classification 섹션을 "Tier 1 항상 먼저 + AI fallback 2엔진" 구조로 재서술 + 순서 `<select>` (on-device-first / byok-first) + 선택에 따라 동적으로 바뀌는 설명 문구.
+- **결정:** default `on-device-first` 유지 — 옵션 omit 시 `?? "on-device-first"`로 기존 동작과 100% 동일, 회귀 없음. byok-first는 on-device가 느린/불가 머신용 명시적 opt-in.
+- **검증:** provider 테스트 신규 2 (byok-first가 BYOK 먼저·chrome-ai 미호출 / BYOK 키 없으면 chrome-ai로 fallback) → unit 172/172. typecheck·build 깨끗. (E2E 변경 없음 — cascade는 BYOK/on-device 가용성에 의존, 기존 tier1 e2e 영향 없음.)
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
