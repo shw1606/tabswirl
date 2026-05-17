@@ -15,7 +15,7 @@
 
 import { matchDomainRule } from "../core/domain-rules";
 import { extractDomain, isClassifiable } from "../core/tabs";
-import type { ChromeGroupColor } from "../core/types";
+import type { ChromeGroupColor, Tier2Order } from "../core/types";
 import type { Language, TabInput } from "../llm/prompts";
 import { classifyInitial, type LlmProviderName } from "../llm/provider";
 import { seedDomainEntries } from "./domain-cache";
@@ -42,6 +42,7 @@ interface RunOptions {
   language: Language;
   model?: string;
   provider?: LlmProviderName;
+  tier2Order?: Tier2Order;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {

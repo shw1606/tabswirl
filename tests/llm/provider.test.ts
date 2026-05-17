@@ -184,6 +184,74 @@ describe("provider facade", () => {
     expect(net.requests).toHaveLength(0);
   });
 
+  it('tier2Order "byok-first" hits BYOK before chrome-ai (chrome-ai not called)', async () => {
+    // A *working* on-device model is present — but byok-first means it
+    // must not be consulted while the BYOK call succeeds.
+    const fakeSession = {
+      prompt: vi.fn(async () =>
+        JSON.stringify({
+          assignments: [
+            { tab_id: 1, group_name: "X", color: "blue", is_new_group: true },
+          ],
+        }),
+      ),
+      destroy: vi.fn(),
+    };
+    vi.stubGlobal("LanguageModel", {
+      availability: vi.fn(async () => "available"),
+      create: vi.fn(async () => fakeSession),
+    });
+    await storage.local.set({ "byok:anthropic": "sk-test" });
+    net.queueResponse({
+      status: 200,
+      body: toolResponse([{ tab_id: 1, group_name: "G", color: "blue" }]),
+    });
+
+    const result = await classifyInitial(
+      [{ id: 1, title: "A", domain: "a.example" }],
+      { language: "en", provider: "anthropic", tier2Order: "byok-first" },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(net.requests[0]?.url).toBe("https://api.anthropic.com/v1/messages");
+    // On-device never touched — BYOK won the race.
+    expect(fakeSession.prompt).not.toHaveBeenCalled();
+  });
+
+  it('tier2Order "byok-first" falls back to chrome-ai when BYOK has no key', async () => {
+    const fakeSession = {
+      prompt: vi.fn(async () =>
+        JSON.stringify({
+          assignments: [
+            {
+              tab_id: 1,
+              group_name: "Code",
+              color: "purple",
+              is_new_group: true,
+            },
+          ],
+        }),
+      ),
+      destroy: vi.fn(),
+    };
+    vi.stubGlobal("LanguageModel", {
+      availability: vi.fn(async () => "available"),
+      create: vi.fn(async () => fakeSession),
+    });
+    // No byok:anthropic key set → Anthropic returns missing-key, cascade
+    // must fall through to the on-device model.
+
+    const result = await classifyInitial(
+      [{ id: 1, title: "GH", domain: "github.com" }],
+      { language: "en", provider: "anthropic", tier2Order: "byok-first" },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(fakeSession.prompt).toHaveBeenCalled();
+    // chrome-ai is on-device — no network at all.
+    expect(net.requests).toHaveLength(0);
+  });
+
   it('cascade does NOT loop when primary is "chrome-ai" itself', async () => {
     vi.stubGlobal("LanguageModel", undefined);
     const result = await classifyInitial(

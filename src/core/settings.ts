@@ -14,6 +14,7 @@ const SETTINGS_KEY = "settings:main";
 // continuous tab classification).
 export const DEFAULT_SETTINGS: Settings = {
   llmProvider: "anthropic",
+  tier2Order: "on-device-first",
   autoClassifyEnabled: true,
   sendUrls: false,
   confirmBeforeRestore: true,

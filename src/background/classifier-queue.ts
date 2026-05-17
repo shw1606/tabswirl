@@ -22,7 +22,7 @@
 import { matchDomainRule } from "../core/domain-rules";
 import { logTiming } from "../core/log";
 import { extractDomain } from "../core/tabs";
-import type { ChromeGroupColor } from "../core/types";
+import type { ChromeGroupColor, Tier2Order } from "../core/types";
 import type { ExistingGroup, Language, TabInput } from "../llm/prompts";
 import { classifyIncremental, type LlmProviderName } from "../llm/provider";
 import {
@@ -57,6 +57,7 @@ interface FlushOptions {
   language: Language;
   model?: string;
   provider?: LlmProviderName;
+  tier2Order?: Tier2Order;
 }
 
 export interface EnqueueInput {
@@ -67,6 +68,7 @@ export interface EnqueueInput {
   language: Language;
   model?: string;
   provider?: LlmProviderName;
+  tier2Order?: Tier2Order;
 }
 
 export type EnqueuePath = "cache-hit" | "rule-hit" | "queued";
@@ -195,6 +197,7 @@ export async function enqueueTab(
     language: input.language,
     model: input.model,
     provider: input.provider,
+    tier2Order: input.tier2Order,
   });
   console.log(
     `[tabswirl:timing] queued tab=${input.tabId} ${domain} (enqueue=${Math.round(

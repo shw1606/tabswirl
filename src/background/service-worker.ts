@@ -52,6 +52,7 @@ chrome.runtime.onStartup.addListener(() => {
       language: settings.language,
       model: settings.llmModel,
       provider: settings.llmProvider,
+      tier2Order: settings.tier2Order,
     });
   })();
 });

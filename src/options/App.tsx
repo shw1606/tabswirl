@@ -121,34 +121,76 @@ export function App() {
       <section className="mt-6">
         <h2 className="text-sm font-medium">Classification</h2>
         <p className="mt-1 text-xs text-neutral-600">
-          TabSwirl classifies in three tiers, cheapest first:
+          TabSwirl classifies cheapest-first:
         </p>
         <ol className="ml-5 mt-2 list-decimal space-y-1 text-xs text-neutral-700">
           <li>
             <strong>Domain rules</strong> — well-known sites like youtube.com /
-            github.com are categorized instantly with no LLM call.
+            github.com are categorized instantly with no LLM call. Always
+            runs first.
           </li>
           <li>
-            <strong>Chrome built-in AI</strong> — on-device Gemini Nano. Free,
-            no key, no network.{" "}
-            {chromeAiReady === null ? (
-              <em>Checking availability…</em>
-            ) : chromeAiReady ? (
-              <span className="rounded bg-emerald-100 px-1 py-0.5 text-emerald-700">
-                ✓ Ready
-              </span>
-            ) : (
-              <span className="rounded bg-neutral-200 px-1 py-0.5 text-neutral-600">
-                ✗ Unavailable — install Chrome 148+, sign in with Sync, and try
-                again. Falls back to your BYOK key below.
-              </span>
-            )}
-          </li>
-          <li>
-            <strong>BYOK provider</strong> — used when the first two tiers
-            don't fire.
+            <strong>AI fallback</strong> — for sites not in the rules table.
+            Two engines, tried in the order you set below:
+            <ul className="ml-4 mt-1 list-disc space-y-0.5">
+              <li>
+                <strong>Chrome built-in AI</strong> — on-device Gemini Nano.
+                Free, no key, no network.{" "}
+                {chromeAiReady === null ? (
+                  <em>Checking availability…</em>
+                ) : chromeAiReady ? (
+                  <span className="rounded bg-emerald-100 px-1 py-0.5 text-emerald-700">
+                    ✓ Ready
+                  </span>
+                ) : (
+                  <span className="rounded bg-neutral-200 px-1 py-0.5 text-neutral-600">
+                    ✗ Unavailable — install Chrome 148+, sign in with Sync.
+                  </span>
+                )}
+              </li>
+              <li>
+                <strong>BYOK provider</strong> — your API key (Claude Haiku),
+                configured below.
+              </li>
+            </ul>
           </li>
         </ol>
+
+        <label className="mt-3 block text-xs font-medium text-neutral-700">
+          When domain rules miss, try first:
+        </label>
+        <select
+          value={settings.tier2Order}
+          onChange={(e) =>
+            void updateSetting(
+              "tier2Order",
+              e.target.value as Settings["tier2Order"],
+            )
+          }
+          className="mt-1 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+        >
+          <option value="on-device-first">
+            On-device AI first (free, private)
+          </option>
+          <option value="byok-first">
+            My API key first (faster, consistent)
+          </option>
+        </select>
+        <p className="mt-1 text-xs text-neutral-600">
+          {settings.tier2Order === "on-device-first" ? (
+            <>
+              Chrome's on-device model runs first; your API key is only used
+              when it's unavailable or returns something unusable. Lowest cost,
+              fully private — but on-device can be slow on some machines.
+            </>
+          ) : (
+            <>
+              Your API key runs first for fast, consistent results; Chrome's
+              on-device model is the fallback if the key is missing or the call
+              fails. Costs ~$0.01/month at typical usage.
+            </>
+          )}
+        </p>
       </section>
 
       <section className="mt-6">

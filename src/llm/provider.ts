@@ -13,6 +13,7 @@
 //
 // PRD §6.6 lists this file as the canonical place for the interface.
 
+import type { Tier2Order } from "../core/types";
 import { anthropicProvider } from "./anthropic";
 import { chromeAiProvider } from "./chrome-ai";
 import { geminiProvider } from "./gemini";
@@ -49,6 +50,11 @@ export interface ClassifyOptions {
   signal?: AbortSignal;
   /** Defaults to "anthropic" when omitted. */
   provider?: LlmProviderName;
+  /**
+   * Which AI tier runs first when domain rules miss. Defaults to
+   * "on-device-first" (Chrome built-in AI, then BYOK). See Tier2Order.
+   */
+  tier2Order?: Tier2Order;
 }
 
 export interface LlmProvider {
@@ -80,31 +86,60 @@ export interface LlmProvider {
 const DEFAULT_PROVIDER: LlmProviderName = "anthropic";
 
 /**
- * Try Chrome's on-device LanguageModel first (when it's not the chosen
- * primary), then fall back to the BYOK provider on miss/failure. This is
- * the Tier 2 → Tier 3 cascade.
+ * Run the two AI tiers — Chrome's on-device LanguageModel and the BYOK
+ * provider — in the order the user picked, stopping at the first success.
+ *
+ * `primary` is the BYOK provider (anthropic/gemini), or chrome-ai itself
+ * for power users who set it explicitly. chrome-ai is only a *distinct*
+ * tier when it isn't already the primary; otherwise the cascade is just
+ * the single primary call (no self-loop).
+ *
+ * `order`:
+ *   "on-device-first" (default) — chrome-ai, then BYOK. Free/private win
+ *                                  when on-device is ready.
+ *   "byok-first"                — BYOK, then chrome-ai. Better when the
+ *                                  on-device model is slow/unavailable.
+ *
+ * If `primary` names no registered backend that's an unsupported-provider
+ * error regardless of order — chrome-ai is an accelerator in front of a
+ * valid primary, never a silent substitute for a misconfigured one.
  */
 async function withCascade(
   primary: LlmProviderName,
+  order: Tier2Order,
   call: (provider: LlmProvider) => Promise<ClassifyResult>,
 ): Promise<ClassifyResult> {
-  if (primary !== "chrome-ai") {
-    const chromeAi = getProvider("chrome-ai");
-    if (chromeAi) {
-      const result = await call(chromeAi);
-      if (result.ok) return result;
-      // Any chrome-ai failure (unavailable, validation, parse) falls
-      // through to the primary provider.
-    }
-  }
-  const provider = getProvider(primary);
-  if (!provider) {
+  const primaryProvider = getProvider(primary);
+  if (!primaryProvider) {
     return {
       ok: false,
       error: { kind: "unsupported-provider", provider: primary },
     };
   }
-  return call(provider);
+
+  const onDevice = primary === "chrome-ai" ? null : getProvider("chrome-ai");
+  if (!onDevice) {
+    // chrome-ai IS the primary (or unregistered) — no separate tier.
+    return call(primaryProvider);
+  }
+
+  const chain =
+    order === "byok-first"
+      ? [primaryProvider, onDevice]
+      : [onDevice, primaryProvider];
+
+  // On total failure, the *last* attempt's error is the one returned, so
+  // the caller logs something actionable (e.g. missing-key over a generic
+  // on-device-unavailable).
+  let last: ClassifyResult = {
+    ok: false,
+    error: { kind: "unsupported-provider", provider: primary },
+  };
+  for (const provider of chain) {
+    last = await call(provider);
+    if (last.ok) return last;
+  }
+  return last;
 }
 
 /**
@@ -130,7 +165,8 @@ export async function classifyInitial(
   options: ClassifyOptions,
 ): Promise<ClassifyResult> {
   const primary = options.provider ?? DEFAULT_PROVIDER;
-  return withCascade(primary, (p) => p.classifyInitial(tabs, options));
+  const order = options.tier2Order ?? "on-device-first";
+  return withCascade(primary, order, (p) => p.classifyInitial(tabs, options));
 }
 
 export async function classifyIncremental(
@@ -139,7 +175,8 @@ export async function classifyIncremental(
   options: ClassifyOptions,
 ): Promise<ClassifyResult> {
   const primary = options.provider ?? DEFAULT_PROVIDER;
-  return withCascade(primary, (p) =>
+  const order = options.tier2Order ?? "on-device-first";
+  return withCascade(primary, order, (p) =>
     p.classifyIncremental(existingGroups, newTabs, options),
   );
 }

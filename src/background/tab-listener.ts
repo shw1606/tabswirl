@@ -64,6 +64,7 @@ async function handleTabUpdate(
     language: settings.language,
     model: settings.llmModel,
     provider: settings.llmProvider,
+    tier2Order: settings.tier2Order,
   });
   // Listener-side overhead (settings read + filters + enqueue) — usually
   // small but worth surfacing when something stalls.

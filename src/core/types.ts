@@ -53,6 +53,21 @@ export interface Pouch {
   totalTabs: number;
 }
 
+/**
+ * Which of the two AI tiers is attempted first when domain rules (Tier 1)
+ * miss. Tier 1 (the curated domain table) always runs before either.
+ *
+ *   "on-device-first" — Chrome built-in AI (Gemini Nano), then BYOK.
+ *                        Default: free, private, no network on a hit.
+ *   "byok-first"      — your API key (Claude Haiku), then Chrome built-in.
+ *                        Faster + more consistent if on-device is slow or
+ *                        unavailable on your machine.
+ *
+ * The cascade implementation lives in src/llm/provider.ts (withCascade);
+ * this type is the user-facing knob it reads from settings.
+ */
+export type Tier2Order = "on-device-first" | "byok-first";
+
 export interface Settings {
   /** Mirrored from src/llm/provider.ts LlmProviderName. */
   llmProvider: "anthropic" | "gemini";
@@ -63,6 +78,8 @@ export interface Settings {
    * back to its default.
    */
   llmModel?: string;
+  /** Order the two AI tiers are tried in. Default "on-device-first". */
+  tier2Order: Tier2Order;
   autoClassifyEnabled: boolean;
   /** When false, only domain (not full URL) is sent to the LLM. */
   sendUrls: boolean;
