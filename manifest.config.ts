@@ -12,7 +12,7 @@ import { defineManifest } from "@crxjs/vite-plugin";
 export default defineManifest({
   manifest_version: 3,
   name: "TabSwirl",
-  version: "0.2.0",
+  version: "0.3.0",
   description:
     "AI-powered automatic tab classification with consume-on-restore Pouches.",
   permissions: ["tabs", "tabGroups", "storage", "unlimitedStorage"],
