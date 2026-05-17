@@ -588,6 +588,20 @@
 
 ---
 
+## 678f1a8 — 2026-05-16 16:44 KST
+**fix(groups): never create a duplicate same-name group**
+
+- **상황 (사용자 보고, 실사용 중 핵심 버그):** 이름·색 같은데 id만 다른 그룹이 윈도우에 여러 개 생김 ("Code" 그룹 여러 개 등).
+- **원인:** `applyGroup`이 `existingGroupId` 없으면 무조건 새 그룹 생성. Tier 1 룰 경로(`enqueueTab`)와 initial-classifier 룰 패스가 group id를 추적 안 해서, 서로 다른 code 도메인 첫 방문마다 새 "Code" 그룹 생성. 슬로우 패스만 `snapshotWindowGroups`로 통합하고 있었음.
+- **핵심 변경 (group-manager.ts, 단일 진실):**
+  - `applyGroup`: `existingGroupId` 없으면 `chrome.tabGroups.query({windowId})`로 같은 title 그룹 찾아 재사용. 모든 호출자가 자동으로 중복 안전.
+  - 기존 동명 그룹에 머지할 땐 `chrome.tabGroups.update` 호출 안 함 → 사용자가 recolor한 색 보존 (group-learning과 일관).
+  - `consolidateDuplicateGroups(windowId)` 신설: title별 버킷 → 첫 그룹에 나머지 탭 흡수. 빈 dup은 Chrome이 자동 삭제 → onRemoved → 캐시 self-heal.
+  - `classifyAllOpenTabs`가 윈도우별로 consolidate 먼저 실행 → "Re-classify all" 버튼이 기존 중복도 청소.
+- **검증:** group-manager 신규 3 (재사용·recolor 보존·consolidate) → unit 170/170. E2E 신규 1 (github+gitlab+stackoverflow → "Code" 그룹 정확히 1개) → e2e 10/10. typecheck·build 깨끗.
+
+---
+
 ## 알려진 미해결 / 다음 작업으로 넘긴 사항
 
 - ~~**PRD ↔ CLAUDE.md 경로 불일치**~~ — 해결됨 (`docs/TabSwirl-PRD.md` → `docs/PRD.md`로 rename, CLAUDE.md 참조와 일치).
